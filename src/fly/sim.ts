@@ -5,8 +5,10 @@ export const PEDESTAL_R = 0.46;
 export const PEDESTAL_H = 0.9;
 export const MIRROR_H = 0.98;
 export const MIRROR_W = 0.3;
-export const FLY_LEN = 0.018;
+export const MIRROR_CLEAR = 0.055;
+export const FLY_LEN = 0.026;
 export const FLIGHT_CEILING = 1.15;
+export const TOUCH_DIST = 0.2;
 
 const motorZero = (): MotorReadout => ({
   looming: 0,
@@ -41,10 +43,10 @@ export const sim = {
     openSpace: 0.7,
   } as SenseInput,
   fly: {
-    x: 0.14,
-    y: PEDESTAL_H + 0.004,
-    z: 0.09,
-    yaw: -0.6,
+    x: 0.12,
+    y: PEDESTAL_H + 0.006,
+    z: 0.11,
+    yaw: 0.15,
     pitch: 0,
     roll: 0,
     vx: 0,
@@ -54,6 +56,8 @@ export const sim = {
     wingPhase: 0,
     walkPhase: 0,
     headYaw: 0,
+    airTime: 0,
+    landLock: 0,
   },
   cam: {
     x: 0.48,

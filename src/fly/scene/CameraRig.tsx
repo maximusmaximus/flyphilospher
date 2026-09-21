@@ -393,11 +393,11 @@ export function CameraRig() {
     window.__flyCamInstall && (window.__flyCamInstall.camera = camera);
 
     if (f.airborne && !rig.airborne) {
-      rig.takeoff = 2.15;
+      rig.takeoff = 2.4;
       rig.shot = "wide";
-      if (!rig.hold && ptrs.size === 0) {
-        rig.lastInput = performance.now() - (IDLE_BEFORE_RETURN + 2.2) * 1000;
-      }
+      rig.hold = false;
+      ptrs.clear();
+      rig.lastInput = performance.now() - (IDLE_BEFORE_RETURN + 3) * 1000;
     }
     if (!f.airborne && rig.airborne) {
       rig.takeoff = 0;
