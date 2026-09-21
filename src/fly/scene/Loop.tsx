@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { buzz } from "../audio/buzz";
@@ -6,39 +6,16 @@ import { FLIGHT_CEILING, PEDESTAL_H, PEDESTAL_R, sim } from "../sim";
 
 const CAM = new THREE.Vector3();
 const FWD = new THREE.Vector3();
-const UP = new THREE.Vector3();
 const FLY = new THREE.Vector3();
 const TO_FLY = new THREE.Vector3();
 const TO_MIRROR = new THREE.Vector3();
 const FLEE = new THREE.Vector3();
 const DESIRED = new THREE.Vector3();
-const PREV_CAM = new THREE.Vector3(0.7, 1.2, 0.9);
-const FRAME_TARGET = new THREE.Vector3(0, PEDESTAL_H * 0.72, 0);
-const FRAME_POS = new THREE.Vector3(1.55, 1.55, 1.7);
-
-type OrbitLike = {
-  target: THREE.Vector3;
-  update: () => void;
-};
+const PREV_CAM = new THREE.Vector3(0.48, 1.06, 0.32);
 
 export function Loop() {
-  const { camera, controls } = useThree();
-  const wasAir = useRef(false);
-  const frameT = useRef(0);
-  const userTouch = useRef(false);
+  const { camera } = useThree();
   const acc = useRef(0);
-
-  useEffect(() => {
-    const on = () => {
-      userTouch.current = true;
-    };
-    document.addEventListener("pointerdown", on);
-    document.addEventListener("wheel", on, { passive: true });
-    return () => {
-      document.removeEventListener("pointerdown", on);
-      document.removeEventListener("wheel", on);
-    };
-  }, []);
 
   useFrame((_, delta) => {
     const d = Math.min(delta, 0.08);
@@ -158,24 +135,6 @@ export function Loop() {
       f.roll += (0 - f.roll) * (1 - Math.exp(-d * 6));
     }
 
-    if (f.airborne && !wasAir.current) {
-      frameT.current = 1.6;
-      userTouch.current = false;
-    }
-    wasAir.current = f.airborne;
-    if (frameT.current > 0 && !userTouch.current) {
-      frameT.current -= d;
-      const orbit = controls as OrbitLike | null;
-      if (orbit) {
-        orbit.target.lerp(FRAME_TARGET, 1 - Math.exp(-d * 2.4));
-        camera.position.lerp(FRAME_POS, 1 - Math.exp(-d * 2.1));
-        orbit.update();
-      }
-    }
-
-    sim.cam.x = camera.position.x;
-    sim.cam.y = camera.position.y;
-    sim.cam.z = camera.position.z;
     sim.cam.moving = camSpeed;
 
     buzz.setListener(CAM.x, CAM.y, CAM.z, FWD.x, FWD.y, FWD.z, 0, 1, 0);

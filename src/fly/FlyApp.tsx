@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { FlyBrain, loadConnectome } from "./brain/engine";
 import { buzz } from "./audio/buzz";
@@ -9,10 +8,12 @@ import { FlyMesh } from "./scene/Fly";
 import { World } from "./scene/World";
 import { Loop } from "./scene/Loop";
 import { BrainView } from "./scene/BrainView";
+import { CameraRig } from "./scene/CameraRig";
 
 export function FlyApp() {
   const [live, setLive] = useState(false);
   const [client, setClient] = useState(false);
+  const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setClient(true);
@@ -38,7 +39,14 @@ export function FlyApp() {
   };
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-void" onPointerDown={unlock}>
+    <div
+      ref={host}
+      data-fly-shell
+      tabIndex={0}
+      className="relative h-dvh w-full overflow-hidden bg-void"
+      style={{ touchAction: "none", cursor: "grab" }}
+      onPointerDown={unlock}
+    >
       <Canvas
         shadows
         dpr={[1, 1.75]}
@@ -50,13 +58,15 @@ export function FlyApp() {
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.55,
         }}
-        camera={{ position: [1.35, 1.48, 1.55], fov: 38, near: 0.012, far: 24 }}
-        style={{ position: "absolute", inset: 0, touchAction: "none" }}
-        onCreated={({ gl, scene }) => {
+        camera={{ position: [0.48, 1.06, 0.32], fov: 38, near: 0.004, far: 28 }}
+        style={{ position: "absolute", inset: 0, touchAction: "none", outline: "none" }}
+        onCreated={({ gl, scene, camera }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.shadowMap.enabled = true;
           gl.shadowMap.type = THREE.PCFShadowMap;
+          gl.domElement.style.touchAction = "none";
           scene.background = new THREE.Color("#2a262e");
+          camera.lookAt(0.14, PEDESTAL_H + 0.008, 0.09);
         }}
       >
         {client ? (
@@ -64,20 +74,7 @@ export function FlyApp() {
             <World />
             <FlyMesh />
             <Loop />
-            <OrbitControls
-              makeDefault
-              enablePan={false}
-              enableDamping
-              dampingFactor={0.08}
-              minDistance={0.028}
-              maxDistance={3.4}
-              minPolarAngle={0.18}
-              maxPolarAngle={Math.PI * 0.48}
-              target={[0, PEDESTAL_H + 0.02, 0]}
-              rotateSpeed={0.55}
-              zoomSpeed={0.7}
-              touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE }}
-            />
+            <CameraRig />
           </>
         ) : null}
       </Canvas>

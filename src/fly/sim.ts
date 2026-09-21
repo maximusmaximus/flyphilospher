@@ -56,11 +56,14 @@ export const sim = {
     headYaw: 0,
   },
   cam: {
-    x: 0.7,
-    y: 1.2,
-    z: 0.9,
+    x: 0.48,
+    y: 1.06,
+    z: 0.32,
     moving: 0,
     framing: 0,
+    tracking: 1,
+    radius: 0.42,
+    user: false,
   },
   started: false,
 };
