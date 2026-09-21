@@ -11,7 +11,7 @@ const TO_FLY = new THREE.Vector3();
 const TO_PERCH = new THREE.Vector3();
 const FLEE = new THREE.Vector3();
 const DESIRED = new THREE.Vector3();
-const PREV_CAM = new THREE.Vector3(0.48, 1.06, 0.32);
+const PREV_CAM = new THREE.Vector3(0.72, 1.32, 0.62);
 
 function bounceMirror(x: number, y: number, z: number, vx: number, vz: number) {
   const halfW = MIRROR_W * 0.5 + 0.03;

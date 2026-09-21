@@ -9,17 +9,18 @@ const WIDE_FOV = 46;
 const MACRO_R = 0.092;
 const PORTRAIT_R = 0.34;
 const WIDE_R = 1.92;
-const AIR_R = 0.82;
 const MIN_R = 0.04;
 const MAX_R = 3.35;
 const PHI_MIN = 0.14;
 const PHI_MAX = Math.PI * 0.49;
 const IDLE_BEFORE_RETURN = 1.25;
 const TAU = Math.PI * 2;
+const SCENE_X = 0;
+const SCENE_Y = PEDESTAL_H + 0.05;
+const SCENE_Z = 0;
 
 const LOOK = new THREE.Vector3();
 const POS = new THREE.Vector3();
-const FLY = new THREE.Vector3();
 const OFFSET = new THREE.Vector3();
 const RIGHT = new THREE.Vector3();
 const UP = new THREE.Vector3();
@@ -35,12 +36,12 @@ const drag = { x: 0, y: 0 };
 
 export const rig = {
   theta: 0.95,
-  phi: 1.2,
-  radius: 0.42,
+  phi: 1.18,
+  radius: 0.78,
   fov: PORTRAIT_FOV,
-  lookX: 0.14,
-  lookY: PEDESTAL_H + 0.008,
-  lookZ: 0.09,
+  lookX: SCENE_X,
+  lookY: SCENE_Y,
+  lookZ: SCENE_Z,
   offX: 0,
   offY: 0,
   offZ: 0,
@@ -49,7 +50,7 @@ export const rig = {
   vRadius: 0,
   shot: "portrait" as Shot,
   groundShot: "portrait" as Shot,
-  tracking: 1,
+  tracking: 0,
   idle: 0,
   takeoff: 0,
   hold: false,
@@ -61,19 +62,6 @@ export const rig = {
   sizeW: 1280,
   sizeH: 720,
 };
-
-function wrapPi(a: number) {
-  while (a > Math.PI) a -= TAU;
-  while (a < -Math.PI) a += TAU;
-  return a;
-}
-
-function radiusFor(shot: Shot, airborne: boolean, takeoff: number) {
-  if (takeoff > 0) return WIDE_R;
-  if (shot === "macro") return MACRO_R;
-  if (shot === "wide") return airborne ? Math.max(AIR_R, 1.35) : WIDE_R;
-  return airborne ? AIR_R : PORTRAIT_R;
-}
 
 function fovFor(shot: Shot, takeoff: number) {
   if (takeoff > 0 || shot === "wide") return WIDE_FOV;
@@ -129,17 +117,14 @@ function snapMacro() {
   rig.groundShot = "macro";
   rig.takeoff = 0;
   rig.hold = false;
-  rig.lastInput = performance.now() - (IDLE_BEFORE_RETURN + 3.5) * 1000;
-  rig.tracking = 1;
-  rig.offX = 0;
-  rig.offY = 0;
-  rig.offZ = 0;
+  rig.lastInput = performance.now();
+  rig.tracking = 0;
   rig.radius += (MACRO_R - rig.radius) * 0.55;
   rig.fov += (MACRO_FOV - rig.fov) * 0.45;
   rig.vRadius = 0;
   rig.vTheta *= 0.2;
   rig.vPhi *= 0.2;
-  sim.cam.user = false;
+  sim.cam.user = true;
 }
 
 function magnet() {
@@ -393,15 +378,8 @@ export function CameraRig() {
     window.__flyCamInstall && (window.__flyCamInstall.camera = camera);
 
     if (f.airborne && !rig.airborne) {
-      rig.takeoff = 2.4;
+      rig.takeoff = 2.2;
       rig.shot = "wide";
-      rig.hold = false;
-      ptrs.clear();
-      rig.lastInput = performance.now() - (IDLE_BEFORE_RETURN + 3) * 1000;
-    }
-    if (!f.airborne && rig.airborne) {
-      rig.takeoff = 0;
-      rig.shot = rig.groundShot;
     }
     rig.airborne = f.airborne;
     if (rig.takeoff > 0) rig.takeoff = Math.max(0, rig.takeoff - d);
@@ -413,8 +391,7 @@ export function CameraRig() {
     }
 
     const navigating = rig.hold || ptrs.size > 0;
-    const t = currentTracking();
-    rig.tracking = t;
+    rig.tracking = 0;
     if (navigating) {
       rig.vTheta *= Math.exp(-d * 8);
       rig.vPhi *= Math.exp(-d * 8);
@@ -427,31 +404,26 @@ export function CameraRig() {
       rig.radius = THREE.MathUtils.clamp(rig.radius + rig.vRadius * d, MIN_R, MAX_R);
     }
 
-    FLY.set(f.x, f.y + 0.007, f.z);
-    const desiredR = radiusFor(rig.shot, f.airborne, rig.takeoff);
-    const desiredFov = fovFor(rig.shot, rig.takeoff);
-    const desiredPhi = rig.takeoff > 0 ? 1.12 : f.airborne ? 1.05 : rig.shot === "macro" ? 1.18 : 1.22;
-    const desiredTheta = f.yaw + 2.25;
-    const tBlend = t;
-    if (tBlend > 0.001) {
-      const camD = Math.min(delta, 0.25);
-      const k = 1 - Math.exp(-camD * (0.7 + tBlend * 1.15));
-      rig.theta += wrapPi(desiredTheta - rig.theta) * k * t;
-      rig.phi += (desiredPhi - rig.phi) * k * t;
-      rig.radius += (desiredR - rig.radius) * k * t;
-      rig.offX += (0 - rig.offX) * k * t;
-      rig.offY += (0 - rig.offY) * k * t;
-      rig.offZ += (0 - rig.offZ) * k * t;
+    if (rig.takeoff > 0) {
+      const k = 1 - Math.exp(-d * 1.6);
+      rig.radius += (WIDE_R - rig.radius) * k;
+      rig.fov += (WIDE_FOV - rig.fov) * k;
+      rig.offX += (0 - rig.offX) * k;
+      rig.offY += (0 - rig.offY) * k;
+      rig.offZ += (0 - rig.offZ) * k;
     }
 
-    const lookK = 1 - Math.exp(-d * (rig.takeoff > 0 ? 2.3 : 7.2));
-    const lx = rig.takeoff > 0 ? 0 : FLY.x;
-    const ly = rig.takeoff > 0 ? PEDESTAL_H * 0.62 : FLY.y;
-    const lz = rig.takeoff > 0 ? 0 : FLY.z;
+    const lx = rig.takeoff > 0 ? 0 : SCENE_X;
+    const ly = rig.takeoff > 0 ? PEDESTAL_H * 0.62 : SCENE_Y;
+    const lz = rig.takeoff > 0 ? 0 : SCENE_Z;
+    const lookK = 1 - Math.exp(-d * (rig.takeoff > 0 ? 2.2 : 6.5));
     rig.lookX += (lx + rig.offX - rig.lookX) * lookK;
     rig.lookY += (ly + rig.offY - rig.lookY) * lookK;
     rig.lookZ += (lz + rig.offZ - rig.lookZ) * lookK;
-    rig.fov += (desiredFov - rig.fov) * (1 - Math.exp(-d * 4.5));
+    const desiredFov = fovFor(rig.shot, rig.takeoff);
+    if (rig.takeoff <= 0) {
+      rig.fov += (desiredFov - rig.fov) * (1 - Math.exp(-d * 4.5));
+    }
     rig.phi = THREE.MathUtils.clamp(rig.phi, PHI_MIN, PHI_MAX);
     rig.radius = THREE.MathUtils.clamp(rig.radius, MIN_R, MAX_R);
 
@@ -469,7 +441,7 @@ export function CameraRig() {
     sim.cam.x = cam.position.x;
     sim.cam.y = cam.position.y;
     sim.cam.z = cam.position.z;
-    sim.cam.tracking = rig.tracking;
+    sim.cam.tracking = 0;
     sim.cam.radius = rig.radius;
     sim.cam.framing = rig.takeoff > 0 ? 1 : 0;
     sim.cam.user = navigating;

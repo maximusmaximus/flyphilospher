@@ -65,7 +65,7 @@ export const sim = {
     z: 0.32,
     moving: 0,
     framing: 0,
-    tracking: 1,
+    tracking: 0,
     radius: 0.42,
     user: false,
   },

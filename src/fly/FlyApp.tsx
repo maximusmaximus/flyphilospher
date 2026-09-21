@@ -58,7 +58,7 @@ export function FlyApp() {
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.55,
         }}
-        camera={{ position: [0.48, 1.06, 0.32], fov: 38, near: 0.004, far: 28 }}
+        camera={{ position: [0.72, 1.32, 0.62], fov: 40, near: 0.004, far: 28 }}
         style={{ position: "absolute", inset: 0, touchAction: "none", outline: "none" }}
         onCreated={({ gl, scene, camera }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
@@ -66,7 +66,7 @@ export function FlyApp() {
           gl.shadowMap.type = THREE.PCFShadowMap;
           gl.domElement.style.touchAction = "none";
           scene.background = new THREE.Color("#2a262e");
-          camera.lookAt(0.14, PEDESTAL_H + 0.008, 0.09);
+          camera.lookAt(0, PEDESTAL_H + 0.05, 0);
         }}
       >
         {client ? (
