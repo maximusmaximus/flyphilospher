@@ -5,7 +5,7 @@ import { settleDrop } from "../drops/fns";
 import { sculptFromImage } from "../drops/sculpt";
 import type { DropItem } from "../drops/types";
 import { clearFly } from "./clear";
-import { topologyFromImage } from "../memory/topology";
+import { topologyFromImage, topologyFromParts } from "../memory/topology";
 import { FLY_SIZE, MIRROR_CLEAR, PEDESTAL_H, PEDESTAL_R, sim } from "../sim";
 
 type Body = {
@@ -76,23 +76,28 @@ function Piece({ item }: { item: DropItem }) {
 
   useEffect(() => {
     let gone = false;
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
+    const apply = (img: HTMLImageElement | null) => {
       if (gone) return;
       const sculpt = sculptFromImage(img, FLY_SIZE * item.scale, item.mesh);
-      const emb = topologyFromImage(img);
+      const emb = img ? topologyFromImage(img) : item.mesh ? topologyFromParts(item.mesh.parts) : null;
       const body = bodies.get(item.id);
       if (body && emb) body.emb = emb;
       if (!sculpt) return;
       mesh.clear();
       mesh.add(sculpt);
     };
+    if (item.mesh && item.mesh.parts.length >= 3) apply(null);
+    if (!item.image) return () => {
+      gone = true;
+    };
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => apply(img);
     img.src = item.image;
     return () => {
       gone = true;
     };
-  }, [item.image, item.scale, mesh]);
+  }, [item.image, item.mesh, item.scale, item.id, mesh]);
 
   useFrame(() => {
     const body = bodies.get(item.id);

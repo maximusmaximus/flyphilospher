@@ -428,6 +428,19 @@ export function Loop() {
         kenyon: m.kenyon,
         updates: brain.updates,
         snap: brain.snapshot(),
+        drops: sim.drops.map((item) => item.prompt),
+        sense: {
+          limb0: s.limb0,
+          limb1: s.limb1,
+          limb2: s.limb2,
+          limb3: s.limb3,
+          limb4: s.limb4,
+          limb5: s.limb5,
+          antenna: s.antenna,
+          fur: s.fur,
+          wingSense: s.wingSense,
+          tarsal: s.tarsal,
+        },
       }),
     };
   });
@@ -458,6 +471,19 @@ declare global {
           valence: number;
           updates: number;
           kc: Array<{ r: number; e: number; v: number }>;
+        };
+        drops: string[];
+        sense: {
+          limb0: number;
+          limb1: number;
+          limb2: number;
+          limb3: number;
+          limb4: number;
+          limb5: number;
+          antenna: number;
+          fur: number;
+          wingSense: number;
+          tarsal: number;
         };
       };
     };

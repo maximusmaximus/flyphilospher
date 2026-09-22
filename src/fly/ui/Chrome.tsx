@@ -81,20 +81,31 @@ export function Chrome() {
     try {
       const quality = detectQuality().mobile ? "low" : "high";
       const designed = await designDrop({ data: { prompt: text } });
+      sim.drops = [...sim.drops.filter((item) => item.id !== designed.item.id), designed.item];
+      setItems(sim.drops);
       setPhase(`Shaping ${designed.mesh.parts.length} parts`);
       setPhaseWhen(designed.dropAt);
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      await new Promise((resolve) => setTimeout(resolve, 400));
       setPhase("Painting the surface");
-      const result = await submitDrop({
-        data: { prompt: text, quality, enhanced: designed.enhanced, mesh: designed.mesh },
-      });
-      const soon = result.item.dropAt <= Date.now() + 2000;
-      setPhase(soon ? "Falling now" : "Waiting to fall");
-      setPhaseWhen(result.item.dropAt);
-      sim.drops = [...sim.drops.filter((item) => item.id !== result.item.id), result.item];
-      setItems(sim.drops);
-      setPrompt("");
-      sim.say(soon ? `${result.item.prompt} is falling.` : `${result.item.prompt} is waiting in the sky.`);
+      try {
+        const result = await submitDrop({
+          data: { prompt: text, quality, enhanced: designed.enhanced, mesh: designed.mesh, id: designed.item.id },
+        });
+        const soon = result.item.dropAt <= Date.now() + 2000;
+        setPhase(result.painted === false ? "Solid is falling" : soon ? "Falling now" : "Waiting to fall");
+        setPhaseWhen(result.item.dropAt);
+        sim.drops = [...sim.drops.filter((item) => item.id !== result.item.id && item.id !== designed.item.id), result.item];
+        setItems(sim.drops);
+        setPrompt("");
+        sim.say(soon ? `${result.item.prompt} is falling.` : `${result.item.prompt} is waiting in the sky.`);
+        if (result.painted === false) setError("the paint failed, the solid is still falling");
+      } catch (err) {
+        setPhase("Solid is falling");
+        setPhaseWhen(designed.item.dropAt);
+        setPrompt("");
+        sim.say(`${designed.item.prompt} is falling.`);
+        setError(err instanceof Error ? err.message : "the paint failed, the solid is still falling");
+      }
       window.setTimeout(() => {
         setPhase("");
         setPhaseWhen(null);

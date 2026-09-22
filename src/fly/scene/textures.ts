@@ -51,47 +51,33 @@ export function makeEyeAlbedo() {
 
 export function makeAbdomen() {
   const { c, g } = canvas(256);
-  const grd = g.createLinearGradient(0, 0, 0, 256);
-  grd.addColorStop(0, "#5a4030");
-  grd.addColorStop(0.5, "#3a281c");
-  grd.addColorStop(1, "#1c120c");
-  g.fillStyle = grd;
+  g.fillStyle = "#c4a06a";
   g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 7; i++) {
-    const y = 10 + i * 34;
-    g.fillStyle = i % 2 === 0 ? "rgba(12,8,6,0.72)" : "rgba(90,62,40,0.28)";
-    g.fillRect(0, y, 256, i % 2 === 0 ? 16 : 10);
-    g.fillStyle = "rgba(180,140,90,0.08)";
-    g.fillRect(0, y + 1, 256, 2);
+  for (let i = 0; i < 6; i++) {
+    const y = 8 + i * 40;
+    g.fillStyle = i % 2 === 0 ? "rgba(28,18,10,0.82)" : "rgba(196,150,78,0.15)";
+    g.fillRect(0, y, 256, 18);
+    g.fillStyle = "rgba(90,60,30,0.35)";
+    g.fillRect(180, y, 76, 18);
   }
-  for (let i = 0; i < 500; i++) {
-    g.fillStyle = `rgba(16,8,4,${Math.random() * 0.22})`;
-    g.fillRect(Math.random() * 256, Math.random() * 256, 1, 2);
-  }
+  g.fillStyle = "rgba(20,12,8,0.55)";
+  g.fillRect(108, 0, 28, 256);
   return tex(c, 1, 4);
 }
 
 export function makeThorax() {
   const { c, g } = canvas(256);
-  g.fillStyle = "#2e241c";
+  g.fillStyle = "#6a645c";
   g.fillRect(0, 0, 256, 256);
-  const stripe = g.createLinearGradient(0, 0, 256, 0);
-  stripe.addColorStop(0, "rgba(0,0,0,0)");
-  stripe.addColorStop(0.46, "rgba(18,12,8,0.55)");
-  stripe.addColorStop(0.5, "rgba(10,6,4,0.8)");
-  stripe.addColorStop(0.54, "rgba(18,12,8,0.55)");
-  stripe.addColorStop(1, "rgba(0,0,0,0)");
-  g.fillStyle = stripe;
-  g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 1400; i++) {
-    const x = Math.random() * 256;
-    const y = Math.random() * 256;
-    g.fillStyle = `rgba(${30 + Math.random() * 36},${22 + Math.random() * 18},${12},0.4)`;
-    g.beginPath();
-    g.arc(x, y, Math.random() * 1.8, 0, Math.PI * 2);
-    g.fill();
+  for (const x of [48, 92, 148, 196]) {
+    g.fillStyle = "rgba(12,10,8,0.88)";
+    g.fillRect(x, 0, 14, 256);
   }
-  return tex(c, 2, 4);
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = `rgba(20,16,12,${0.15 + Math.random() * 0.35})`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1, 3);
+  }
+  return tex(c, 1, 4);
 }
 
 export function makeStone() {

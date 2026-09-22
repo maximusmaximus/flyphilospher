@@ -20,6 +20,7 @@ export const submitDrop = createServerFn({ method: "POST" })
       quality: z.enum(["high", "low"]),
       enhanced: z.string().max(1500).optional(),
       mesh: z.unknown().optional(),
+      id: z.string().min(4).max(80).optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -28,7 +29,7 @@ export const submitDrop = createServerFn({ method: "POST" })
       data.enhanced && data.mesh
         ? { enhanced: data.enhanced, mesh: data.mesh as import("./types").MeshSpec }
         : undefined;
-    return generateDrop(data.prompt, data.quality, designed);
+    return generateDrop(data.prompt, data.quality, designed, data.id);
   });
 
 export const settleDrop = createServerFn({ method: "POST" })

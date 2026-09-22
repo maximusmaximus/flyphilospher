@@ -13,76 +13,56 @@ const S = new THREE.Vector3();
 const M4 = new THREE.Matrix4();
 const Y_UP = new THREE.Vector3(0, 1, 0);
 
-const LEGS: Array<{ side: number; x: number; z: number; gait: number; fold: number }> = [
-  { side: -1, x: 0.2, z: 0.2, gait: 0, fold: 0.62 },
-  { side: 1, x: 0.2, z: 0.2, gait: Math.PI, fold: 0.62 },
-  { side: -1, x: 0.24, z: 0, gait: Math.PI, fold: 0.05 },
-  { side: 1, x: 0.24, z: 0, gait: 0, fold: 0.05 },
-  { side: -1, x: 0.18, z: -0.2, gait: 0, fold: -0.58 },
-  { side: 1, x: 0.18, z: -0.2, gait: Math.PI, fold: -0.58 },
+const LEGS: Array<{ side: number; z: number; gait: number; fold: number }> = [
+  { side: -1, z: 0.28, gait: 0, fold: 0.7 },
+  { side: 1, z: 0.28, gait: Math.PI, fold: 0.7 },
+  { side: -1, z: 0.02, gait: Math.PI, fold: 0 },
+  { side: 1, z: 0.02, gait: 0, fold: 0 },
+  { side: -1, z: -0.22, gait: 0, fold: -0.65 },
+  { side: 1, z: -0.22, gait: Math.PI, fold: -0.65 },
 ];
 
 function Leg({
   side,
-  x,
   z,
   gait,
   fold,
   mats,
 }: {
   side: number;
-  x: number;
   z: number;
   gait: number;
   fold: number;
   mats: { chitin: THREE.MeshPhysicalMaterial; dark: THREE.MeshPhysicalMaterial };
 }) {
   const root = useRef<THREE.Group>(null);
-  const femur = useRef<THREE.Group>(null);
-  const tibia = useRef<THREE.Group>(null);
   useFrame(() => {
     const f = sim.fly;
     const m = sim.motor;
     const air = f.airborne ? 1 : 0;
     const drive = Math.min(1, m.leg * 1.15 + m.walkFwd * 0.65 + (m.walking ? 0.4 : 0));
-    const ph = f.walkPhase + gait;
-    const swing = Math.sin(ph);
-    const lift = Math.max(0, swing) * drive * (1 - air);
-    const stride = Math.cos(ph) * 0.32 * drive * (1 - air);
-    if (root.current) {
-      root.current.rotation.z = side * (1.05 - lift * 0.28 + air * 0.35);
-      root.current.rotation.x = fold + stride + air * 0.35;
-    }
-    if (femur.current) {
-      femur.current.rotation.z = side * 0.62;
-      femur.current.rotation.x = stride * 0.2;
-    }
-    if (tibia.current) {
-      tibia.current.rotation.z = side * (-1.25 + lift * 0.4 - air * 0.15);
-      tibia.current.rotation.x = -stride * 0.15;
-    }
+    const swing = Math.sin(f.walkPhase + gait);
+    const stride = Math.cos(f.walkPhase + gait) * 0.22 * drive * (1 - air);
+    if (!root.current) return;
+    root.current.rotation.x = stride;
+    root.current.position.y = Math.max(0, swing) * 0.045 * drive * (1 - air) + air * 0.06;
+    root.current.rotation.z = air * side * 0.25;
   });
+  const s = side;
   return (
-    <group ref={root} position={[side * x, -0.05, z]}>
-      <mesh position={[0, -0.045, 0]} material={mats.dark} castShadow>
-        <capsuleGeometry args={[0.02, 0.05, 3, 5]} />
+    <group ref={root} position={[0, 0, z]}>
+      <mesh position={[s * 0.14, 0.5, 0]} rotation={[fold * 0.2, 0, s * -0.85]} material={mats.dark} castShadow>
+        <capsuleGeometry args={[0.014, 0.08, 3, 5]} />
       </mesh>
-      <group ref={femur} position={[0, -0.09, 0]}>
-        <mesh position={[0, -0.13, 0]} material={mats.chitin} castShadow>
-          <capsuleGeometry args={[0.016, 0.2, 3, 6]} />
-        </mesh>
-        <group ref={tibia} position={[0, -0.26, 0]}>
-          <mesh position={[0, -0.15, 0]} material={mats.dark} castShadow>
-            <capsuleGeometry args={[0.012, 0.24, 3, 5]} />
-          </mesh>
-          <mesh position={[0, -0.32, 0.01]} material={mats.dark} castShadow>
-            <capsuleGeometry args={[0.007, 0.16, 2, 4]} />
-          </mesh>
-          <mesh position={[0, -0.42, 0.02]} material={mats.dark}>
-            <sphereGeometry args={[0.011, 6, 6]} />
-          </mesh>
-        </group>
-      </group>
+      <mesh position={[s * 0.3, 0.4, fold * 0.05]} rotation={[fold * 0.25, 0, s * -0.28]} material={mats.chitin} castShadow>
+        <capsuleGeometry args={[0.012, 0.2, 3, 6]} />
+      </mesh>
+      <mesh position={[s * 0.34, 0.2, fold * 0.1]} rotation={[0.35, 0, s * 0.18]} material={mats.dark} castShadow>
+        <capsuleGeometry args={[0.008, 0.26, 3, 5]} />
+      </mesh>
+      <mesh position={[s * 0.3, 0.05, fold * 0.12]} rotation={[0.7, 0, s * 0.05]} material={mats.dark} castShadow>
+        <capsuleGeometry args={[0.0045, 0.1, 2, 4]} />
+      </mesh>
     </group>
   );
 }
@@ -112,7 +92,7 @@ export function FlyMesh() {
   const mats = useMemo(() => {
     const chitin = new THREE.MeshPhysicalMaterial({
       map: maps.thorax,
-      color: "#2a241c",
+      color: "#5e5850",
       roughness: 0.38,
       metalness: 0.12,
       sheen: 0.7,
@@ -130,7 +110,7 @@ export function FlyMesh() {
     });
     const abd = new THREE.MeshPhysicalMaterial({
       map: maps.abdomen,
-      color: "#3a2a20",
+      color: "#d2b07a",
       roughness: 0.5,
       metalness: 0.06,
       sheen: 0.4,
@@ -182,14 +162,13 @@ export function FlyMesh() {
     const g = new THREE.LatheGeometry(
       [
         new THREE.Vector2(0.02, 0),
-        new THREE.Vector2(0.26, 0.04),
-        new THREE.Vector2(0.34, 0.18),
-        new THREE.Vector2(0.33, 0.42),
-        new THREE.Vector2(0.28, 0.7),
-        new THREE.Vector2(0.2, 1.02),
-        new THREE.Vector2(0.11, 1.28),
-        new THREE.Vector2(0.04, 1.45),
-        new THREE.Vector2(0, 1.52),
+        new THREE.Vector2(0.16, 0.02),
+        new THREE.Vector2(0.28, 0.12),
+        new THREE.Vector2(0.3, 0.32),
+        new THREE.Vector2(0.24, 0.55),
+        new THREE.Vector2(0.14, 0.78),
+        new THREE.Vector2(0.05, 0.92),
+        new THREE.Vector2(0, 0.98),
       ],
       28,
     );
@@ -201,7 +180,7 @@ export function FlyMesh() {
   const setae = useMemo(() => {
     const count = 420;
     const mesh = new THREE.InstancedMesh(
-      new THREE.ConeGeometry(0.012, 0.22, 4),
+      new THREE.ConeGeometry(0.006, 0.08, 4),
       new THREE.MeshStandardMaterial({ color: "#120e0a", roughness: 0.75 }),
       count,
     );
@@ -222,6 +201,7 @@ export function FlyMesh() {
       mesh.setMatrixAt(i, M4);
     }
     mesh.instanceMatrix.needsUpdate = true;
+    mesh.position.set(0, 0.58, 0.02);
     mesh.frustumCulled = false;
     return mesh;
   }, []);
@@ -251,14 +231,14 @@ export function FlyMesh() {
     const amp = flying ? 0.42 + wingDrive * 0.55 : 0.035 + m.wingPower * 0.05;
     const steer = m.wingSteer * 0.18;
     if (wingL.current) {
-      wingL.current.rotation.y = flying ? 0.15 : 0.55;
-      wingL.current.rotation.z = (flying ? 0.15 : 0.42) + steer;
-      wingL.current.rotation.x = (flying ? -0.15 : 0.22) + beat * amp;
+      wingL.current.rotation.y = flying ? 0.35 : 0.42;
+      wingL.current.rotation.z = (flying ? 0.55 : 0.22) + steer;
+      wingL.current.rotation.x = (flying ? -0.35 : 0.06) + beat * amp;
     }
     if (wingR.current) {
-      wingR.current.rotation.y = flying ? -0.15 : -0.55;
-      wingR.current.rotation.z = (flying ? -0.15 : -0.42) + steer;
-      wingR.current.rotation.x = (flying ? -0.15 : 0.22) + beat * amp;
+      wingR.current.rotation.y = flying ? -0.35 : -0.42;
+      wingR.current.rotation.z = (flying ? -0.55 : -0.22) + steer;
+      wingR.current.rotation.x = (flying ? -0.35 : 0.06) + beat * amp;
     }
     const blurOp = flying ? 0.22 + Math.abs(beat) * 0.12 : 0;
     if (blurL.current) {
@@ -293,105 +273,90 @@ export function FlyMesh() {
   });
 
   return (
-    <group ref={group} scale={0.1}>
-      <group position={[0, 0.22, 0.08]}>
-        <mesh material={mats.chitin} scale={[0.88, 0.78, 1.22]} castShadow receiveShadow>
-          <sphereGeometry args={[0.5, 28, 22]} />
+    <group ref={group} name="housefly" scale={0.11}>
+      <group position={[0, 0, 0]}>
+        <mesh position={[0, 0.58, 0.02]} material={mats.chitin} scale={[0.92, 0.7, 1.05]} castShadow receiveShadow>
+          <sphereGeometry args={[0.4, 32, 24]} />
         </mesh>
-        <mesh position={[0, 0.22, -0.28]} material={mats.chitin} scale={[0.55, 0.38, 0.42]} castShadow>
-          <sphereGeometry args={[0.42, 16, 12]} />
+        <mesh position={[0, 0.72, -0.28]} material={mats.chitin} scale={[0.55, 0.28, 0.36]} castShadow>
+          <sphereGeometry args={[0.28, 16, 12]} />
         </mesh>
         <primitive object={setae} />
 
-        <group ref={head} position={[0, 0.02, 0.62]}>
-          <mesh material={mats.chitin} scale={[0.78, 0.7, 0.62]} castShadow>
-            <sphereGeometry args={[0.4, 22, 18]} />
+        <group ref={head} position={[0, 0.56, 0.48]}>
+          <mesh material={mats.chitin} scale={[1.05, 0.82, 0.78]} castShadow>
+            <sphereGeometry args={[0.26, 24, 18]} />
           </mesh>
-          <mesh position={[-0.2, 0.03, 0.14]} rotation={[0.04, 0.5, 0.06]} material={mats.eye} scale={[0.78, 0.92, 0.7]} castShadow>
-            <sphereGeometry args={[0.24, 28, 20]} />
+          <mesh position={[-0.14, 0.02, 0.06]} rotation={[0, 0.35, 0]} material={mats.eye} scale={[0.72, 0.95, 0.62]} castShadow>
+            <sphereGeometry args={[0.16, 28, 20]} />
           </mesh>
-          <mesh position={[0.2, 0.03, 0.14]} rotation={[0.04, -0.5, -0.06]} material={mats.eye} scale={[0.78, 0.92, 0.7]} castShadow>
-            <sphereGeometry args={[0.24, 28, 20]} />
-          </mesh>
-          <mesh position={[-0.08, 0.32, 0.12]} material={mats.dark}>
-            <sphereGeometry args={[0.035, 8, 8]} />
-          </mesh>
-          <mesh position={[0.08, 0.32, 0.12]} material={mats.dark}>
-            <sphereGeometry args={[0.035, 8, 8]} />
-          </mesh>
-          <mesh position={[0, 0.34, 0.16]} material={mats.dark}>
-            <sphereGeometry args={[0.028, 8, 8]} />
-          </mesh>
-          <mesh position={[0, 0.22, 0.02]} material={mats.dark}>
-            <sphereGeometry args={[0.04, 8, 8]} />
+          <mesh position={[0.14, 0.02, 0.06]} rotation={[0, -0.35, 0]} material={mats.eye} scale={[0.72, 0.95, 0.62]} castShadow>
+            <sphereGeometry args={[0.16, 28, 20]} />
           </mesh>
           <mesh position={[-0.05, 0.2, 0.08]} material={mats.dark}>
-            <sphereGeometry args={[0.028, 6, 6]} />
+            <sphereGeometry args={[0.018, 8, 8]} />
           </mesh>
           <mesh position={[0.05, 0.2, 0.08]} material={mats.dark}>
-            <sphereGeometry args={[0.028, 6, 6]} />
+            <sphereGeometry args={[0.018, 8, 8]} />
           </mesh>
-          <mesh position={[0, -0.2, 0.22]} rotation={[1.05, 0, 0]} material={mats.dark} castShadow>
-            <capsuleGeometry args={[0.045, 0.22, 4, 8]} />
+          <mesh position={[0, 0.22, 0.1]} material={mats.dark}>
+            <sphereGeometry args={[0.014, 8, 8]} />
           </mesh>
-          <group position={[-0.1, 0.28, 0.28]} rotation={[0.4, 0.2, 0.7]}>
+          <mesh position={[0, -0.16, 0.16]} rotation={[1.15, 0, 0]} material={mats.dark} castShadow>
+            <capsuleGeometry args={[0.03, 0.1, 4, 6]} />
+          </mesh>
+          <mesh position={[0, -0.28, 0.2]} material={mats.dark}>
+            <sphereGeometry args={[0.045, 10, 8]} />
+          </mesh>
+          <group position={[-0.04, 0.08, 0.22]} rotation={[0.9, 0.15, 0.2]}>
             <mesh material={mats.dark}>
-              <capsuleGeometry args={[0.02, 0.12, 3, 5]} />
+              <capsuleGeometry args={[0.012, 0.06, 3, 4]} />
             </mesh>
-            <mesh position={[0.02, 0.16, 0]} rotation={[0.2, 0, 0.4]} material={mats.dark}>
-              <capsuleGeometry args={[0.006, 0.34, 2, 4]} />
+            <mesh position={[0.01, 0.08, 0]} rotation={[0.4, 0, 0.5]} material={mats.dark}>
+              <capsuleGeometry args={[0.003, 0.16, 2, 3]} />
             </mesh>
           </group>
-          <group position={[0.1, 0.28, 0.28]} rotation={[0.4, -0.2, -0.7]}>
+          <group position={[0.04, 0.08, 0.22]} rotation={[0.9, -0.15, -0.2]}>
             <mesh material={mats.dark}>
-              <capsuleGeometry args={[0.02, 0.12, 3, 5]} />
+              <capsuleGeometry args={[0.012, 0.06, 3, 4]} />
             </mesh>
-            <mesh position={[-0.02, 0.16, 0]} rotation={[0.2, 0, -0.4]} material={mats.dark}>
-              <capsuleGeometry args={[0.006, 0.34, 2, 4]} />
+            <mesh position={[-0.01, 0.08, 0]} rotation={[0.4, 0, -0.5]} material={mats.dark}>
+              <capsuleGeometry args={[0.003, 0.16, 2, 3]} />
             </mesh>
           </group>
         </group>
 
-        <group ref={abdomen} position={[0, -0.02, -0.55]}>
+        <group ref={abdomen} position={[0, 0.5, -0.32]} rotation={[-0.18, 0, 0]}>
           <mesh geometry={abdGeo} material={mats.abd} castShadow receiveShadow />
-          <mesh position={[0, 0.02, -0.28]} rotation={[Math.PI / 2, 0, 0]} material={mats.dark}>
-            <torusGeometry args={[0.22, 0.025, 6, 16]} />
-          </mesh>
-          <mesh position={[0, 0.01, -0.55]} rotation={[Math.PI / 2, 0, 0]} material={mats.dark}>
-            <torusGeometry args={[0.18, 0.022, 6, 16]} />
-          </mesh>
-          <mesh position={[0, 0, -0.82]} rotation={[Math.PI / 2, 0, 0]} material={mats.dark}>
-            <torusGeometry args={[0.13, 0.018, 6, 14]} />
-          </mesh>
         </group>
 
-        <group ref={wingL} position={[-0.18, 0.48, -0.08]} rotation={[0.35, 0.35, 0.55]}>
+        <group ref={wingL} position={[-0.08, 0.88, -0.05]}>
           <mesh geometry={wingGeo} material={mats.wing} />
         </group>
-        <group ref={wingR} position={[0.18, 0.48, -0.08]} rotation={[0.35, -0.35, -0.55]}>
+        <group ref={wingR} position={[0.08, 0.88, -0.05]}>
           <mesh geometry={wingGeo} material={mats.wing} scale={[-1, 1, 1]} />
         </group>
-        <mesh ref={blurL} position={[-0.55, 0.3, -0.15]} rotation={[0.1, 0.4, 0.7]} material={mats.blur}>
-          <circleGeometry args={[0.85, 18]} />
+        <mesh ref={blurL} position={[-0.42, 0.7, -0.2]} material={mats.blur}>
+          <circleGeometry args={[0.7, 16]} />
         </mesh>
-        <mesh ref={blurR} position={[0.55, 0.3, -0.15]} rotation={[0.1, -0.4, -0.7]} material={mats.blur}>
-          <circleGeometry args={[0.85, 18]} />
+        <mesh ref={blurR} position={[0.42, 0.7, -0.2]} material={mats.blur}>
+          <circleGeometry args={[0.7, 16]} />
         </mesh>
 
-        <group ref={haltL} position={[-0.18, 0.08, -0.22]}>
-          <mesh material={mats.dark} rotation={[0.85, 0, 0.35]}>
-            <capsuleGeometry args={[0.018, 0.14, 2, 5]} />
+        <group ref={haltL} position={[-0.16, 0.62, -0.22]}>
+          <mesh material={mats.dark} rotation={[1.1, 0, 0.4]}>
+            <capsuleGeometry args={[0.01, 0.08, 2, 4]} />
           </mesh>
-          <mesh position={[-0.06, -0.1, -0.02]} material={mats.chitin}>
-            <sphereGeometry args={[0.05, 8, 8]} />
+          <mesh position={[-0.04, -0.06, -0.02]} material={mats.chitin}>
+            <sphereGeometry args={[0.028, 8, 8]} />
           </mesh>
         </group>
-        <group ref={haltR} position={[0.18, 0.08, -0.22]}>
-          <mesh material={mats.dark} rotation={[0.85, 0, -0.35]}>
-            <capsuleGeometry args={[0.018, 0.14, 2, 5]} />
+        <group ref={haltR} position={[0.16, 0.62, -0.22]}>
+          <mesh material={mats.dark} rotation={[1.1, 0, -0.4]}>
+            <capsuleGeometry args={[0.01, 0.08, 2, 4]} />
           </mesh>
-          <mesh position={[0.06, -0.1, -0.02]} material={mats.chitin}>
-            <sphereGeometry args={[0.05, 8, 8]} />
+          <mesh position={[0.04, -0.06, -0.02]} material={mats.chitin}>
+            <sphereGeometry args={[0.028, 8, 8]} />
           </mesh>
         </group>
 

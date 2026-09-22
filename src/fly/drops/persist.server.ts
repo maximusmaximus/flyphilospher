@@ -14,8 +14,17 @@ const BUDGET = 1;
 const REPO = "maximusmaximus/flyphilospher";
 
 const B32 = "abcdefghijklmnopqrstuvwxyz234567";
-
 let chain: Promise<unknown> = Promise.resolve();
+
+function dropDirs() {
+  if (process.env.FLY_DROP_DIR) return [process.env.FLY_DROP_DIR];
+  return [DROP_DIR, TMP_DIR];
+}
+
+function spendFiles() {
+  if (process.env.FLY_SPEND_PATH) return [process.env.FLY_SPEND_PATH];
+  return [SPEND_PATH, path.join(TMP_DIR, "spend.json")];
+}
 
 function lock<T>(fn: () => Promise<T>): Promise<T> {
   const run = chain.then(fn, fn);
@@ -78,7 +87,7 @@ function friendly(err: unknown) {
 }
 
 async function readSpend() {
-  const files = [SPEND_PATH, path.join(TMP_DIR, "spend.json")];
+  const files = spendFiles();
   for (const file of files) {
     try {
       const raw = JSON.parse(await readFile(file, "utf8")) as { day?: string; usd?: number };
@@ -92,23 +101,19 @@ async function readSpend() {
 
 async function writeSpend(usd: number) {
   const body = JSON.stringify({ day: dayKey(), usd });
-  try {
-    await mkdir(path.dirname(SPEND_PATH), { recursive: true });
-    await writeFile(SPEND_PATH, body);
-  } catch {
-    /* read-only */
-  }
-  try {
-    await mkdir(TMP_DIR, { recursive: true });
-    await writeFile(path.join(TMP_DIR, "spend.json"), body);
-  } catch {
-    /* read-only */
+  for (const file of spendFiles()) {
+    try {
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, body);
+    } catch {
+      /* read-only */
+    }
   }
 }
 
 export async function readPublicCatalog(): Promise<Catalog> {
   let items: DropItem[] = [];
-  const paths = [CATALOG_PATH, path.join(TMP_DIR, "catalog.json")];
+  const paths = dropDirs().map((dir) => path.join(dir, "catalog.json"));
   for (const file of paths) {
     try {
       const raw = JSON.parse(await readFile(file, "utf8")) as { items?: DropItem[] };
@@ -127,7 +132,7 @@ export async function readPublicCatalog(): Promise<Catalog> {
 
 async function writeCatalog(items: DropItem[]) {
   const body = JSON.stringify({ items }, null, 2);
-  for (const dir of [DROP_DIR, TMP_DIR]) {
+  for (const dir of dropDirs()) {
     try {
       await mkdir(dir, { recursive: true });
       await writeFile(path.join(dir, "catalog.json"), body);
@@ -171,7 +176,10 @@ async function pinIpfs(buf: Buffer, filename: string, cid: string) {
   return { uri: `ipfs://${cid}`, pinned: false };
 }
 
-async function venice(pathName: string, body: unknown, key: string) {
+type VeniceFn = (pathName: string, body: unknown, key: string) => Promise<Response>;
+
+async function defaultVenice(pathName: string, body: unknown, key: string) {
+  const slow = pathName.includes("image");
   const res = await fetch(`https://api.venice.ai/api/v1${pathName}`, {
     method: "POST",
     headers: {
@@ -179,53 +187,76 @@ async function venice(pathName: string, body: unknown, key: string) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(slow ? 55000 : 28000),
   });
   return res;
 }
 
+let veniceFn: VeniceFn = defaultVenice;
+
+export function setVeniceTransport(fn: VeniceFn | null) {
+  veniceFn = fn ?? defaultVenice;
+}
+
+async function venice(pathName: string, body: unknown, key: string) {
+  return veniceFn(pathName, body, key);
+}
+
 async function designObject(prompt: string, key: string) {
-  const res = await venice(
-    "/chat/completions",
-    {
-      model: "grok-4-7",
-      temperature: 0.4,
-      max_tokens: 900,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Design one small physical object as JSON only. No markdown. Keys: prompt (one sentence, studio photo, isolated, white background, no text), metalness 0-1, roughness 0-1, depth 0.2-0.9, parts (max 10). Each part: kind ellipsoid|capsule|box|cone, at [x,y,z] from -1 to 1, size [sx,sy,sz] from 0.06 to 1.2, rot [rx,ry,rz] radians, color #rrggbb. y is up. The parts must form a recognizable solid with volume, not a flat card.",
-        },
-        { role: "user", content: prompt },
-      ],
-    },
-    key,
-  );
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err.slice(0, 280) || "the solid could not be designed");
-  }
-  const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const text = json.choices?.[0]?.message?.content?.trim() || "";
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  let parsed: unknown = {};
-  if (start >= 0 && end > start) {
-    try {
-      parsed = JSON.parse(text.slice(start, end + 1));
-    } catch {
-      parsed = {};
+  let last = "the solid could not be designed";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await venice(
+      "/chat/completions",
+      {
+        model: "grok-4-7",
+        temperature: 0.3,
+        max_completion_tokens: 1400,
+        reasoning: { enabled: false, effort: "none" },
+        venice_parameters: { disable_thinking: true, strip_thinking_response: true },
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "Design one small physical object as JSON only. Keys: prompt (one sentence, studio photo of one isolated object, seamless white background, no text), metalness 0-1, roughness 0-1, depth 0.35-0.85, parts (8 to 14). Each part: kind ellipsoid|capsule|box|cone, at [x,y,z] from -1 to 1, size [sx,sy,sz] from 0.08 to 1.1, rot [rx,ry,rz] radians, color #rrggbb. y is up and 0 is the ground. A creature needs a body, a head, ears or a tail when it has them, and one part per limb. The parts must form a recognizable solid, not a flat card.",
+          },
+          { role: "user", content: attempt === 0 ? prompt : `${prompt}. Return at least eight solid parts.` },
+        ],
+      },
+      key,
+    );
+    if (!res.ok) {
+      const err = await res.text();
+      last = err.slice(0, 280) || last;
+      continue;
     }
+    const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = json.choices?.[0]?.message?.content?.trim() || "";
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    let parsed: unknown = {};
+    if (start >= 0 && end > start) {
+      try {
+        parsed = JSON.parse(text.slice(start, end + 1));
+      } catch {
+        parsed = {};
+      }
+    }
+    const mesh = sanitizeMesh(parsed);
+    if (mesh.parts.length < 4) {
+      last = "the solid came back without a body";
+      continue;
+    }
+    const promptText =
+      parsed && typeof parsed === "object" && typeof (parsed as { prompt?: string }).prompt === "string"
+        ? (parsed as { prompt: string }).prompt
+        : prompt;
+    return {
+      prompt: promptText.replace(/\s+/g, " ").slice(0, 1400),
+      mesh,
+    };
   }
-  const mesh = sanitizeMesh(parsed);
-  const promptText =
-    parsed && typeof parsed === "object" && typeof (parsed as { prompt?: string }).prompt === "string"
-      ? (parsed as { prompt: string }).prompt
-      : prompt;
-  return {
-    prompt: promptText.replace(/\s+/g, " ").slice(0, 1400),
-    mesh,
-  };
+  throw new Error(last);
 }
 
 export function designDrop(prompt: string) {
@@ -244,11 +275,29 @@ export function designDrop(prompt: string) {
     await writeSpend(spent + 0.02);
     const catalog = await readPublicCatalog();
     const now = Date.now();
-    const dropAt = catalog.items.length < 10 ? now + 900 : nextOpenSlot(catalog.items.map((item) => item.dropAt), now);
+    const dropAt = catalog.items.length < 10 ? now + 400 : nextOpenSlot(catalog.items.map((item) => item.dropAt), now);
+    const id = `m${now.toString(36)}`;
+    const item: DropItem = {
+      id,
+      cid: id,
+      prompt: clean,
+      enhanced: designed.prompt,
+      createdAt: now,
+      dropAt,
+      scale: Math.min(3, Math.max(1, scaleFor(id))),
+      image: "",
+      github: null,
+      ipfs: null,
+      pinned: false,
+      rest: null,
+      mesh: designed.mesh,
+    };
+    await writeCatalog([...catalog.items, item]);
     return {
       enhanced: designed.prompt,
       mesh: designed.mesh,
       dropAt,
+      item,
       spentToday: spent + 0.02,
       budget: BUDGET,
     };
@@ -257,42 +306,49 @@ export function designDrop(prompt: string) {
 
 async function generateImage(prompt: string, quality: "high" | "low", key: string) {
   const resolution = quality === "high" ? "2K" : "1K";
-  const res = await venice(
-    "/image/generate",
-    {
-      model: "grok-imagine-image-quality",
-      prompt: `${prompt}. Photorealistic, fully three dimensional, one object, seamless white background, no text.`,
-      enhance_prompt: true,
-      aspect_ratio: "1:1",
-      resolution,
-      format: "png",
-      negative_prompt: "text, letters, watermark, logo, person, hands, collage, frame, blurry, flat icon, pixel art, voxels",
-      return_binary: false,
-    },
-    key,
-  );
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err.slice(0, 320) || "image failed");
-  }
-  const enhancedHeader = res.headers.get("x-venice-enhanced-prompt");
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("image/")) {
-    const buf = Buffer.from(await res.arrayBuffer());
-    return { buf, enhanced: enhancedHeader ? decodeURIComponent(enhancedHeader) : prompt };
-  }
-  const json = (await res.json()) as {
-    images?: string[];
-    image?: string;
-    data?: Array<{ b64_json?: string }>;
+  const shared = {
+    prompt: `${prompt}. Photorealistic three dimensional object, one subject, seamless white background, no text.`,
+    enhance_prompt: true,
+    aspect_ratio: "1:1",
+    resolution,
+    format: "png",
+    negative_prompt: "text, letters, watermark, logo, person, hands, collage, frame, blurry, flat icon, pixel art, voxels",
+    return_binary: false,
   };
-  const b64 = json.images?.[0] || json.image || json.data?.[0]?.b64_json;
-  if (!b64) throw new Error("no image in venice response");
-  const clean = b64.replace(/^data:image\/\w+;base64,/, "");
-  return {
-    buf: Buffer.from(clean, "base64"),
-    enhanced: enhancedHeader ? decodeURIComponent(enhancedHeader) : prompt,
-  };
+  const attempts = [
+    { ...shared, model: "grok-imagine-image-quality", style_preset: "3D Model" },
+    { ...shared, model: "grok-imagine-image", style_preset: "3D Model" },
+  ];
+  let last = "image failed";
+  for (const body of attempts) {
+    const res = await venice("/image/generate", body, key);
+    if (!res.ok) {
+      last = (await res.text()).slice(0, 320) || last;
+      continue;
+    }
+    const enhancedHeader = res.headers.get("x-venice-enhanced-prompt");
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("image/")) {
+      const buf = Buffer.from(await res.arrayBuffer());
+      return { buf, enhanced: enhancedHeader ? decodeURIComponent(enhancedHeader) : prompt };
+    }
+    const json = (await res.json()) as {
+      images?: string[];
+      image?: string;
+      data?: Array<{ b64_json?: string }>;
+    };
+    const b64 = json.images?.[0] || json.image || json.data?.[0]?.b64_json;
+    if (!b64) {
+      last = "no image in venice response";
+      continue;
+    }
+    const clean = b64.replace(/^data:image\/\w+;base64,/, "");
+    return {
+      buf: Buffer.from(clean, "base64"),
+      enhanced: enhancedHeader ? decodeURIComponent(enhancedHeader) : prompt,
+    };
+  }
+  throw new Error(last);
 }
 
 function scaleFor(id: string) {
@@ -305,6 +361,7 @@ export function generateDrop(
   prompt: string,
   quality: "high" | "low",
   designed?: { enhanced: string; mesh: MeshSpec },
+  id?: string,
 ) {
   return lock(async () => {
     const clean = prompt.replace(/\s+/g, " ").trim().slice(0, 240);
@@ -316,46 +373,60 @@ export function generateDrop(
     }
     const key = await readKey();
     const catalog = await readPublicCatalog();
-    if (catalog.items.length >= 10 && catalog.items.filter((item) => item.dropAt > Date.now()).length >= 48) {
+    const existing = id ? catalog.items.find((entry) => entry.id === id) : undefined;
+    if (!existing && catalog.items.length >= 10 && catalog.items.filter((item) => item.dropAt > Date.now()).length >= 48) {
       throw new Error("the sky is already full");
     }
-    let drafted = designed?.enhanced || clean;
-    let mesh = sanitizeMesh(designed?.mesh);
-    let image: { buf: Buffer; enhanced: string };
+    let drafted = designed?.enhanced || existing?.enhanced || clean;
+    let mesh = sanitizeMesh(designed?.mesh ?? existing?.mesh);
+    let image: { buf: Buffer; enhanced: string } | null = null;
     try {
-      if (!designed) {
+      if (mesh.parts.length < 4) {
         const made = await designObject(clean, key);
         drafted = made.prompt;
         mesh = made.mesh;
       }
       image = await generateImage(drafted, quality, key);
     } catch (err) {
+      if (existing && mesh.parts.length >= 4) {
+        existing.mesh = mesh;
+        existing.enhanced = drafted;
+        await writeCatalog(catalog.items);
+        return { item: existing, spentToday: spent, budget: BUDGET, painted: false as const };
+      }
       throw new Error(friendly(err));
     }
     const cid = cidOf(image.buf);
     const filename = `${cid}.png`;
     let imageUrl = `/drops/${filename}`;
     let wrote = false;
-    for (const dir of [DROP_DIR, TMP_DIR]) {
+    const primary = dropDirs()[0];
+    for (const dir of dropDirs()) {
       try {
         await mkdir(dir, { recursive: true });
         await writeFile(path.join(dir, filename), image.buf);
-        wrote = dir === DROP_DIR;
+        if (dir === primary) wrote = true;
       } catch {
         /* next dir */
       }
     }
     if (!wrote) imageUrl = `data:image/png;base64,${image.buf.toString("base64")}`;
-    const pin = await pinIpfs(image.buf, filename, cid);
+    const pin = process.env.FLY_DROP_DIR
+      ? { uri: `ipfs://${cid}`, pinned: false }
+      : await Promise.race([
+      pinIpfs(image.buf, filename, cid),
+      new Promise<{ uri: string; pinned: boolean }>((resolve) =>
+        setTimeout(() => resolve({ uri: `ipfs://${cid}`, pinned: false }), 4000),
+      ),
+    ]);
     const now = Date.now();
-    const dropAt = catalog.items.length < 10 ? now + 400 : nextOpenSlot(catalog.items.map((item) => item.dropAt), now);
-    const item: DropItem = {
+    const item: DropItem = existing ?? {
       id: cid.slice(-12),
       cid,
       prompt: clean,
       enhanced: image.enhanced || drafted,
       createdAt: now,
-      dropAt,
+      dropAt: catalog.items.length < 10 ? now + 400 : nextOpenSlot(catalog.items.map((entry) => entry.dropAt), now),
       scale: Math.min(3, Math.max(1, scaleFor(cid))),
       image: imageUrl,
       github: null,
@@ -364,15 +435,17 @@ export function generateDrop(
       rest: null,
       mesh,
     };
-    const items = [...catalog.items, item];
+    item.cid = cid;
+    item.enhanced = image.enhanced || drafted;
+    item.image = imageUrl;
+    item.ipfs = pin.uri;
+    item.pinned = pin.pinned;
+    item.mesh = mesh;
+    const items = existing ? catalog.items : [...catalog.items, item];
     await writeCatalog(items);
     await writeSpend(spent + reserve);
-    const pushed = await githubBackup(`drop: ${clean.slice(0, 72)}`);
-    if (pushed) {
-      item.github = `https://github.com/${REPO}/blob/main/public/drops/${filename}`;
-      await writeCatalog(items);
-    }
-    return { item, spentToday: spent + reserve, budget: BUDGET };
+    if (!process.env.FLY_DROP_DIR) void githubBackup(`drop: ${clean.slice(0, 72)}`).catch(() => undefined);
+    return { item, spentToday: spent + reserve, budget: BUDGET, painted: true as const };
   });
 }
 

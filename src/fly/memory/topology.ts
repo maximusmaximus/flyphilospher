@@ -20,6 +20,47 @@ export function cosine(a: number[], b: number[]) {
   return d / (Math.sqrt(na * nb) || 1);
 }
 
+export function topologyFromParts(parts: Array<{ at: number[]; size: number[] }>) {
+  if (!parts.length) return null;
+  const emb = new Array(DIM).fill(0);
+  let cx = 0;
+  let cz = 0;
+  for (const part of parts) {
+    cx += part.at[0] ?? 0;
+    cz += part.at[2] ?? 0;
+  }
+  cx /= parts.length;
+  cz /= parts.length;
+  const bins = new Array(8).fill(0);
+  const rows = new Array(4).fill(0);
+  let minY = 99;
+  let maxY = -99;
+  for (const part of parts) {
+    const y = part.at[1] ?? 0;
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const span = Math.max(0.2, maxY - minY);
+  for (const part of parts) {
+    const x = part.at[0] ?? 0;
+    const y = part.at[1] ?? 0;
+    const z = part.at[2] ?? 0;
+    const vol = Math.abs((part.size[0] ?? 0.2) * (part.size[1] ?? 0.2) * (part.size[2] ?? 0.2));
+    const ang = Math.atan2(z - cz, x - cx);
+    bins[Math.floor(((ang + Math.PI) / (Math.PI * 2)) * 8) % 8] += vol;
+    rows[Math.min(3, Math.floor(((y - minY) / span) * 3.999))] += vol;
+  }
+  const binMax = Math.max(...bins, 1e-4);
+  for (let i = 0; i < 8; i++) emb[i] = bins[i] / binMax;
+  const rowMax = Math.max(...rows, 1e-4);
+  for (let i = 0; i < 4; i++) emb[8 + i] = rows[i] / rowMax;
+  emb[12] = span;
+  emb[13] = parts.length / 16;
+  emb[14] = Math.min(1, parts.length / 8);
+  emb[15] = 0.5;
+  return normalize(emb);
+}
+
 export function topologyFromPixels(pixels: Uint8ClampedArray, n: number) {
   const solid: boolean[] = [];
   let cx = 0;

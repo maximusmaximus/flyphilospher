@@ -174,11 +174,11 @@ function partMesh(part: MeshPart, target: number, spec: MeshSpec) {
   return mesh;
 }
 
-export function sculptFromImage(img: CanvasImageSource, target: number, spec?: MeshSpec | null) {
+export function sculptFromImage(img: CanvasImageSource | null, target: number, spec?: MeshSpec | null) {
   const body = sanitizeMesh(spec ?? {});
   const group = new THREE.Group();
   const designed = !!spec && spec.parts.length >= 3;
-  if (!designed) {
+  if (!designed && img) {
     const skin = shellMesh(img, target, body);
     if (skin) group.add(skin);
   }
