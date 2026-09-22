@@ -62,6 +62,7 @@ export function Chrome() {
     return () => window.clearInterval(id);
   }, []);
 
+  const free = items.length < 10;
   const upcoming = items.filter((item) => item.dropAt > now).sort((a, b) => a.dropAt - b.dropAt)[0];
   const nextAt = nextDropAt(
     items.map((item) => item.dropAt),
@@ -135,9 +136,9 @@ export function Chrome() {
             </button>
           </form>
           <div className="rounded-2xl border border-ivory/20 bg-void/80 px-3 py-1.5 text-ivory">
-            <div className="font-mono text-[13px] tabular-nums tracking-[0.14em]">{formatCountdown(nextAt - now)}</div>
+            <div className="font-mono text-[13px] tabular-nums tracking-[0.14em]">{free && !upcoming ? "now" : formatCountdown(nextAt - now)}</div>
             <div className="max-w-[180px] truncate text-[11px] text-fog">
-              {upcoming ? upcoming.prompt : "next opening"}
+              {upcoming ? upcoming.prompt : free ? "drops right away" : "next opening"}
             </div>
           </div>
         </div>

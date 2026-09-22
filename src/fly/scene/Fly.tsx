@@ -42,36 +42,42 @@ function Leg({
   const tibia = useRef<THREE.Group>(null);
   useFrame(() => {
     const f = sim.fly;
-    const walk = sim.motor.walking ? 1 : 0.18;
+    const m = sim.motor;
     const air = f.airborne ? 1 : 0;
+    const drive = Math.min(1, m.leg * 1.15 + m.walkFwd * 0.65 + (m.walking ? 0.4 : 0));
     const ph = f.walkPhase + gait;
-    const lift = Math.max(0, Math.sin(ph)) * 0.38 * walk * (1 - air);
-    const stride = Math.cos(ph) * 0.28 * walk * (1 - air);
+    const swing = Math.sin(ph);
+    const lift = Math.max(0, swing) * drive * (1 - air);
+    const stride = Math.cos(ph) * 0.55 * drive * (1 - air);
     if (root.current) {
-      root.current.rotation.z = side * (0.62 + lift * 0.35 + air * 0.45);
-      root.current.rotation.x = stride * 0.55 + fold + air * 0.5;
+      root.current.rotation.z = side * (0.42 + air * 0.35 - lift * 0.08);
+      root.current.rotation.x = fold + stride * 0.65 + air * 0.85;
     }
-    if (femur.current) femur.current.rotation.z = side * (0.55 + lift * 0.8 - air * 0.15);
-    if (tibia.current) tibia.current.rotation.z = side * (0.7 - lift * 0.55 + air * 0.4);
+    if (femur.current) {
+      femur.current.rotation.x = -0.15 - lift * 0.7 + air * 0.45;
+    }
+    if (tibia.current) {
+      tibia.current.rotation.x = 1.15 - lift * 0.35 + air * 0.55;
+    }
   });
   return (
-    <group ref={root} position={[side * x, -0.08, z]}>
-      <mesh material={mats.dark} castShadow>
-        <capsuleGeometry args={[0.028, 0.1, 3, 6]} />
+    <group ref={root} position={[side * x, -0.02, z]}>
+      <mesh position={[0, -0.07, 0]} material={mats.dark} castShadow>
+        <capsuleGeometry args={[0.03, 0.08, 3, 5]} />
       </mesh>
-      <group ref={femur} position={[side * 0.12, -0.1, 0]}>
-        <mesh material={mats.chitin} rotation={[0, 0, side * 0.12]} castShadow>
-          <capsuleGeometry args={[0.022, 0.38, 3, 6]} />
+      <group ref={femur} position={[side * 0.05, -0.12, 0]}>
+        <mesh position={[0, -0.16, 0]} material={mats.chitin} castShadow>
+          <capsuleGeometry args={[0.022, 0.26, 3, 6]} />
         </mesh>
-        <group ref={tibia} position={[side * 0.16, -0.26, 0]}>
-          <mesh material={mats.dark} rotation={[0, 0, side * 0.1]} castShadow>
-            <capsuleGeometry args={[0.016, 0.48, 3, 6]} />
+        <group ref={tibia} position={[0, -0.32, 0]}>
+          <mesh position={[0, -0.18, 0]} material={mats.dark} castShadow>
+            <capsuleGeometry args={[0.016, 0.28, 3, 5]} />
           </mesh>
-          <mesh position={[side * 0.04, -0.3, 0]} material={mats.dark} castShadow>
-            <capsuleGeometry args={[0.011, 0.2, 2, 5]} />
+          <mesh position={[0, -0.36, 0.02]} material={mats.dark} castShadow>
+            <capsuleGeometry args={[0.01, 0.16, 2, 4]} />
           </mesh>
-          <mesh position={[side * 0.05, -0.42, 0]} material={mats.dark}>
-            <sphereGeometry args={[0.018, 6, 6]} />
+          <mesh position={[0, -0.46, 0.04]} material={mats.dark}>
+            <sphereGeometry args={[0.016, 6, 6]} />
           </mesh>
         </group>
       </group>
@@ -234,20 +240,23 @@ export function FlyMesh() {
     const d = Math.min(delta, 0.05);
     const f = sim.fly;
     const m = sim.motor;
-    const flying = f.airborne || m.flying;
-    f.wingPhase += d * (flying ? 52 + m.wingPower * 28 : 6 + m.wingPower * 8);
-    f.walkPhase += d * (m.walking ? 11 + m.leg * 8 : 1.15);
+    const flying = f.airborne || m.flying || m.giantFiber > 0.2;
+    const wingDrive = Math.min(1.4, m.wingPower * 0.85 + Math.abs(m.wingSteer) * 0.25 + (flying ? 0.65 : 0.04));
+    const legDrive = Math.min(1.2, m.leg * 1.1 + m.walkFwd * 0.55 + (m.walking ? 0.35 : 0));
+    f.wingPhase += d * (flying ? 46 + wingDrive * 36 : 2.4 + m.wingPower * 5);
+    f.walkPhase += d * (2 + legDrive * 14);
     const beat = Math.sin(f.wingPhase);
-    const flap = flying ? beat * 0.95 : 0.08 + beat * 0.03;
+    const amp = flying ? 0.42 + wingDrive * 0.55 : 0.035 + m.wingPower * 0.05;
+    const steer = m.wingSteer * 0.18;
     if (wingL.current) {
-      wingL.current.rotation.z = flying ? 0.55 + flap : 0.22;
-      wingL.current.rotation.x = flying ? -0.2 + beat * 0.25 : 0.08;
-      wingL.current.rotation.y = flying ? Math.PI - 0.12 : Math.PI - 0.38;
+      wingL.current.rotation.y = flying ? 0.15 : 0.55;
+      wingL.current.rotation.z = (flying ? 0.15 : 0.42) + steer;
+      wingL.current.rotation.x = (flying ? -0.15 : 0.22) + beat * amp;
     }
     if (wingR.current) {
-      wingR.current.rotation.z = flying ? -0.55 - flap : -0.22;
-      wingR.current.rotation.x = flying ? -0.2 + beat * 0.25 : 0.08;
-      wingR.current.rotation.y = flying ? -0.12 : -0.38;
+      wingR.current.rotation.y = flying ? -0.15 : -0.55;
+      wingR.current.rotation.z = (flying ? -0.15 : -0.42) + steer;
+      wingR.current.rotation.x = (flying ? -0.15 : 0.22) + beat * amp;
     }
     const blurOp = flying ? 0.22 + Math.abs(beat) * 0.12 : 0;
     if (blurL.current) {
@@ -345,11 +354,11 @@ export function FlyMesh() {
           <mesh geometry={abdGeo} material={mats.abd} castShadow receiveShadow />
         </group>
 
-        <group ref={wingL} position={[-0.22, 0.32, 0.02]}>
-          <mesh geometry={wingGeo} material={mats.wing} castShadow />
+        <group ref={wingL} position={[-0.16, 0.42, -0.05]} rotation={[0.2, 0.55, 0.4]}>
+          <mesh geometry={wingGeo} material={mats.wing} />
         </group>
-        <group ref={wingR} position={[0.22, 0.32, 0.02]}>
-          <mesh geometry={wingGeo} material={mats.wing} castShadow />
+        <group ref={wingR} position={[0.16, 0.42, -0.05]} rotation={[0.2, -0.55, -0.4]}>
+          <mesh geometry={wingGeo} material={mats.wing} scale={[-1, 1, 1]} />
         </group>
         <mesh ref={blurL} position={[-0.55, 0.3, -0.15]} rotation={[0.1, 0.4, 0.7]} material={mats.blur}>
           <circleGeometry args={[0.85, 18]} />

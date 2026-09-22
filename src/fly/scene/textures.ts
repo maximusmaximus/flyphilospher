@@ -130,8 +130,8 @@ export function makeWingAlpha() {
   fill.addColorStop(1, "rgba(190,210,200,0.08)");
   g.fillStyle = fill;
   g.fillRect(0, 0, 512, 512);
-  g.strokeStyle = "rgba(42,34,28,0.38)";
-  g.lineWidth = 1.5;
+  g.strokeStyle = "rgba(28, 18, 12, 0.72)";
+  g.lineWidth = 2.4;
   g.beginPath();
   g.moveTo(16, 256);
   g.bezierCurveTo(180, 200, 340, 175, 500, 220);
@@ -164,12 +164,11 @@ export function makeWingAlpha() {
 
 export function makeWingGeometry() {
   const s = new THREE.Shape();
-  s.moveTo(0, 0);
-  s.bezierCurveTo(0.12, 0.16, 0.55, 0.28, 1.28, 0.16);
-  s.bezierCurveTo(1.52, 0.1, 1.62, 0.02, 1.58, -0.06);
-  s.bezierCurveTo(1.48, -0.2, 1.05, -0.28, 0.55, -0.22);
-  s.bezierCurveTo(0.22, -0.16, 0.05, -0.06, 0, 0);
-  const g = new THREE.ShapeGeometry(s, 20);
+  s.moveTo(0.02, 0);
+  s.bezierCurveTo(0.35, 0.42, 1.05, 0.72, 1.85, 0.38);
+  s.bezierCurveTo(2.15, 0.18, 2.05, -0.05, 1.72, -0.22);
+  s.bezierCurveTo(1.15, -0.42, 0.45, -0.22, 0.02, 0);
+  const g = new THREE.ShapeGeometry(s, 24);
   g.rotateX(-Math.PI / 2);
   g.computeVertexNormals();
   return g;

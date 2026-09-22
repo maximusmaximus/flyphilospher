@@ -11,8 +11,8 @@ const PORTRAIT_R = 0.34;
 const WIDE_R = 1.92;
 const MIN_R = 0.04;
 const MAX_R = 3.35;
-const PHI_MIN = 0.14;
-const PHI_MAX = Math.PI * 0.49;
+const PHI_MIN = 0.42;
+const PHI_MAX = 1.22;
 const IDLE_BEFORE_RETURN = 1.25;
 const TAU = Math.PI * 2;
 const SCENE_X = 0;
@@ -36,7 +36,7 @@ const drag = { x: 0, y: 0 };
 
 export const rig = {
   theta: 0.95,
-  phi: 1.18,
+  phi: 1.02,
   radius: 0.78,
   fov: PORTRAIT_FOV,
   lookX: SCENE_X,
@@ -396,7 +396,8 @@ export function CameraRig() {
     }
 
     const navigating = rig.hold || ptrs.size > 0;
-    rig.tracking = 0;
+    const track = navigating ? 0 : currentTracking();
+    rig.tracking = track;
     if (navigating) {
       rig.vTheta *= Math.exp(-d * 8);
       rig.vPhi *= Math.exp(-d * 8);
@@ -407,6 +408,13 @@ export function CameraRig() {
       rig.theta += rig.vTheta * d;
       rig.phi = THREE.MathUtils.clamp(rig.phi + rig.vPhi * d, PHI_MIN, PHI_MAX);
       rig.radius = THREE.MathUtils.clamp(rig.radius + rig.vRadius * d, MIN_R, MAX_R);
+      if (track > 0.05 && rig.takeoff <= 0) {
+        const back = (1 - Math.exp(-d * 1.1)) * track;
+        rig.phi += (1.02 - rig.phi) * back * 0.45;
+        rig.offX += (0 - rig.offX) * back;
+        rig.offY += (0 - rig.offY) * back;
+        rig.offZ += (0 - rig.offZ) * back;
+      }
     }
 
     if (rig.takeoff > 0) {
@@ -418,9 +426,10 @@ export function CameraRig() {
       rig.offZ += (0 - rig.offZ) * k;
     }
 
-    const lx = rig.takeoff > 0 ? 0 : SCENE_X;
-    const ly = rig.takeoff > 0 ? PEDESTAL_H * 0.62 : SCENE_Y;
-    const lz = rig.takeoff > 0 ? 0 : SCENE_Z;
+    const follow = rig.takeoff > 0 ? 0 : track;
+    const lx = rig.takeoff > 0 ? 0 : SCENE_X * (1 - follow) + f.x * follow;
+    const ly = rig.takeoff > 0 ? PEDESTAL_H * 0.62 : SCENE_Y * (1 - follow) + (f.y + 0.04) * follow;
+    const lz = rig.takeoff > 0 ? 0 : SCENE_Z * (1 - follow) + f.z * follow;
     const lookK = 1 - Math.exp(-d * (rig.takeoff > 0 ? 2.2 : 6.5));
     rig.lookX += (lx + rig.offX - rig.lookX) * lookK;
     rig.lookY += (ly + rig.offY - rig.lookY) * lookK;
@@ -446,7 +455,7 @@ export function CameraRig() {
     sim.cam.x = cam.position.x;
     sim.cam.y = cam.position.y;
     sim.cam.z = cam.position.z;
-    sim.cam.tracking = 0;
+    sim.cam.tracking = track;
     sim.cam.radius = rig.radius;
     sim.cam.framing = rig.takeoff > 0 ? 1 : 0;
     sim.cam.user = navigating;

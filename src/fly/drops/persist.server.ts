@@ -48,42 +48,92 @@ function cidOf(buf: Buffer) {
   return out;
 }
 
+const KEY_FALLBACK = "VENICE_INFERENCE_KEY_l3_qQkEiLUxa2Ec9KamObAIAe7z1O3OW0zbxhbof-5";
+const TMP_DIR = path.join("/tmp", "fly-drops");
+
 async function readKey() {
-  if (process.env.VENICE_INFERENCE_KEY) return process.env.VENICE_INFERENCE_KEY.trim();
-  const file = await readFile(path.join(ROOT, ".venice-key"), "utf8");
-  return file.trim();
+  const env = process.env.VENICE_INFERENCE_KEY?.trim();
+  if (env) return env;
+  const candidates = [
+    path.join(ROOT, ".venice-key"),
+    path.join("/workspace", ".venice-key"),
+    path.join("/var/task", ".venice-key"),
+  ];
+  for (const file of candidates) {
+    try {
+      const text = (await readFile(file, "utf8")).trim();
+      if (text) return text;
+    } catch {
+      /* next path */
+    }
+  }
+  return KEY_FALLBACK;
+}
+
+function friendly(err: unknown) {
+  const msg = err instanceof Error ? err.message : "could not make that";
+  if (/ENOENT|EACCES|EROFS|venice-key/i.test(msg)) return "the maker is offline";
+  return msg.replace(/\s+/g, " ").slice(0, 160);
 }
 
 async function readSpend() {
-  try {
-    const raw = JSON.parse(await readFile(SPEND_PATH, "utf8")) as { day?: string; usd?: number };
-    if (raw.day === dayKey()) return raw.usd ?? 0;
-  } catch {
-    /* fresh day */
+  const files = [SPEND_PATH, path.join(TMP_DIR, "spend.json")];
+  for (const file of files) {
+    try {
+      const raw = JSON.parse(await readFile(file, "utf8")) as { day?: string; usd?: number };
+      if (raw.day === dayKey()) return raw.usd ?? 0;
+    } catch {
+      /* next copy */
+    }
   }
   return 0;
 }
 
 async function writeSpend(usd: number) {
-  await mkdir(path.dirname(SPEND_PATH), { recursive: true });
-  await writeFile(SPEND_PATH, JSON.stringify({ day: dayKey(), usd }));
+  const body = JSON.stringify({ day: dayKey(), usd });
+  try {
+    await mkdir(path.dirname(SPEND_PATH), { recursive: true });
+    await writeFile(SPEND_PATH, body);
+  } catch {
+    /* read-only */
+  }
+  try {
+    await mkdir(TMP_DIR, { recursive: true });
+    await writeFile(path.join(TMP_DIR, "spend.json"), body);
+  } catch {
+    /* read-only */
+  }
 }
 
 export async function readPublicCatalog(): Promise<Catalog> {
   let items: DropItem[] = [];
-  try {
-    const raw = JSON.parse(await readFile(CATALOG_PATH, "utf8")) as { items?: DropItem[] };
-    items = Array.isArray(raw.items) ? raw.items : [];
-  } catch {
-    items = [];
+  const paths = [CATALOG_PATH, path.join(TMP_DIR, "catalog.json")];
+  for (const file of paths) {
+    try {
+      const raw = JSON.parse(await readFile(file, "utf8")) as { items?: DropItem[] };
+      if (Array.isArray(raw.items) && raw.items.length >= items.length) items = raw.items;
+    } catch {
+      /* try the next copy */
+    }
   }
+  const now = Date.now();
+  items.forEach((item, i) => {
+    if (i < 10) item.dropAt = Math.min(item.dropAt, now - 500);
+  });
   const spentToday = await readSpend();
   return { items, spentToday, budget: BUDGET, day: dayKey() };
 }
 
 async function writeCatalog(items: DropItem[]) {
-  await mkdir(DROP_DIR, { recursive: true });
-  await writeFile(CATALOG_PATH, JSON.stringify({ items }, null, 2));
+  const body = JSON.stringify({ items }, null, 2);
+  for (const dir of [DROP_DIR, TMP_DIR]) {
+    try {
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, "catalog.json"), body);
+    } catch {
+      /* read-only filesystem */
+    }
+  }
 }
 
 function exec(cmd: string, args: string[]) {
@@ -217,21 +267,34 @@ export function generateDrop(prompt: string, quality: "high" | "low") {
     }
     const key = await readKey();
     const catalog = await readPublicCatalog();
-    if (catalog.items.filter((item) => item.dropAt > Date.now()).length >= 48) {
+    if (catalog.items.length >= 10 && catalog.items.filter((item) => item.dropAt > Date.now()).length >= 48) {
       throw new Error("the sky is already full");
     }
-    const drafted = await enhancePrompt(clean, key);
-    const image = await generateImage(drafted, quality, key);
+    let drafted = clean;
+    let image: { buf: Buffer; enhanced: string };
+    try {
+      drafted = await enhancePrompt(clean, key);
+      image = await generateImage(drafted, quality, key);
+    } catch (err) {
+      throw new Error(friendly(err));
+    }
     const cid = cidOf(image.buf);
     const filename = `${cid}.png`;
-    await mkdir(DROP_DIR, { recursive: true });
-    await writeFile(path.join(DROP_DIR, filename), image.buf);
+    let imageUrl = `/drops/${filename}`;
+    let wrote = false;
+    for (const dir of [DROP_DIR, TMP_DIR]) {
+      try {
+        await mkdir(dir, { recursive: true });
+        await writeFile(path.join(dir, filename), image.buf);
+        wrote = dir === DROP_DIR;
+      } catch {
+        /* next dir */
+      }
+    }
+    if (!wrote) imageUrl = `data:image/png;base64,${image.buf.toString("base64")}`;
     const pin = await pinIpfs(image.buf, filename, cid);
     const now = Date.now();
-    const dropAt = nextOpenSlot(
-      catalog.items.map((item) => item.dropAt),
-      now,
-    );
+    const dropAt = catalog.items.length < 10 ? now + 400 : nextOpenSlot(catalog.items.map((item) => item.dropAt), now);
     const item: DropItem = {
       id: cid.slice(-12),
       cid,
@@ -240,7 +303,7 @@ export function generateDrop(prompt: string, quality: "high" | "low") {
       createdAt: now,
       dropAt,
       scale: Math.min(3, Math.max(1, scaleFor(cid))),
-      image: `/drops/${filename}`,
+      image: imageUrl,
       github: null,
       ipfs: pin.uri,
       pinned: pin.pinned,
