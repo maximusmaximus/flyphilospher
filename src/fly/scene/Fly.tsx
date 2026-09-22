@@ -110,7 +110,7 @@ export function FlyMesh() {
   const mats = useMemo(() => {
     const chitin = new THREE.MeshPhysicalMaterial({
       map: maps.thorax,
-      color: "#4a382c",
+      color: "#2a241c",
       roughness: 0.38,
       metalness: 0.12,
       sheen: 0.7,
@@ -152,7 +152,7 @@ export function FlyMesh() {
       map: maps.wing,
       color: "#dce8e0",
       transparent: true,
-      opacity: 0.62,
+      opacity: 0.82,
       roughness: 0.16,
       metalness: 0.04,
       transmission: 0.38,
@@ -197,14 +197,14 @@ export function FlyMesh() {
   }, []);
 
   const setae = useMemo(() => {
-    const count = 260;
+    const count = 420;
     const mesh = new THREE.InstancedMesh(
-      new THREE.ConeGeometry(0.01, 0.14, 3),
+      new THREE.ConeGeometry(0.012, 0.22, 4),
       new THREE.MeshStandardMaterial({ color: "#120e0a", roughness: 0.75 }),
       count,
     );
     for (let i = 0; i < count; i++) {
-      const onAbd = i > 110;
+      const onAbd = i > 180;
       const u = Math.random() * Math.PI * 2;
       const v = Math.acos(2 * Math.random() - 1);
       const rx = onAbd ? 0.28 : 0.48;
@@ -291,7 +291,7 @@ export function FlyMesh() {
   });
 
   return (
-    <group ref={group} scale={0.072}>
+    <group ref={group} scale={0.1}>
       <group position={[0, 0.22, 0.08]}>
         <mesh material={mats.chitin} scale={[0.88, 0.78, 1.22]} castShadow receiveShadow>
           <sphereGeometry args={[0.5, 28, 22]} />
@@ -332,32 +332,41 @@ export function FlyMesh() {
           <mesh position={[0, -0.2, 0.22]} rotation={[1.05, 0, 0]} material={mats.dark} castShadow>
             <capsuleGeometry args={[0.045, 0.22, 4, 8]} />
           </mesh>
-          <group position={[-0.08, 0.22, 0.22]} rotation={[0.55, 0, 0.45]}>
+          <group position={[-0.1, 0.28, 0.28]} rotation={[0.4, 0.2, 0.7]}>
             <mesh material={mats.dark}>
-              <capsuleGeometry args={[0.018, 0.16, 2, 5]} />
+              <capsuleGeometry args={[0.02, 0.12, 3, 5]} />
             </mesh>
-            <mesh position={[0, 0.16, 0]} rotation={[0.6, 0, 0.2]} material={mats.dark}>
-              <capsuleGeometry args={[0.008, 0.22, 2, 4]} />
+            <mesh position={[0.02, 0.16, 0]} rotation={[0.2, 0, 0.4]} material={mats.dark}>
+              <capsuleGeometry args={[0.006, 0.34, 2, 4]} />
             </mesh>
           </group>
-          <group position={[0.08, 0.22, 0.22]} rotation={[0.55, 0, -0.45]}>
+          <group position={[0.1, 0.28, 0.28]} rotation={[0.4, -0.2, -0.7]}>
             <mesh material={mats.dark}>
-              <capsuleGeometry args={[0.018, 0.16, 2, 5]} />
+              <capsuleGeometry args={[0.02, 0.12, 3, 5]} />
             </mesh>
-            <mesh position={[0, 0.16, 0]} rotation={[0.6, 0, -0.2]} material={mats.dark}>
-              <capsuleGeometry args={[0.008, 0.22, 2, 4]} />
+            <mesh position={[-0.02, 0.16, 0]} rotation={[0.2, 0, -0.4]} material={mats.dark}>
+              <capsuleGeometry args={[0.006, 0.34, 2, 4]} />
             </mesh>
           </group>
         </group>
 
-        <group ref={abdomen} position={[0, -0.04, -0.42]}>
+        <group ref={abdomen} position={[0, -0.02, -0.55]}>
           <mesh geometry={abdGeo} material={mats.abd} castShadow receiveShadow />
+          <mesh position={[0, 0.02, -0.28]} rotation={[Math.PI / 2, 0, 0]} material={mats.dark}>
+            <torusGeometry args={[0.22, 0.025, 6, 16]} />
+          </mesh>
+          <mesh position={[0, 0.01, -0.55]} rotation={[Math.PI / 2, 0, 0]} material={mats.dark}>
+            <torusGeometry args={[0.18, 0.022, 6, 16]} />
+          </mesh>
+          <mesh position={[0, 0, -0.82]} rotation={[Math.PI / 2, 0, 0]} material={mats.dark}>
+            <torusGeometry args={[0.13, 0.018, 6, 14]} />
+          </mesh>
         </group>
 
-        <group ref={wingL} position={[-0.16, 0.42, -0.05]} rotation={[0.2, 0.55, 0.4]}>
+        <group ref={wingL} position={[-0.18, 0.48, -0.08]} rotation={[0.35, 0.35, 0.55]}>
           <mesh geometry={wingGeo} material={mats.wing} />
         </group>
-        <group ref={wingR} position={[0.16, 0.42, -0.05]} rotation={[0.2, -0.55, -0.4]}>
+        <group ref={wingR} position={[0.18, 0.48, -0.08]} rotation={[0.35, -0.35, -0.55]}>
           <mesh geometry={wingGeo} material={mats.wing} scale={[-1, 1, 1]} />
         </group>
         <mesh ref={blurL} position={[-0.55, 0.3, -0.15]} rotation={[0.1, 0.4, 0.7]} material={mats.blur}>

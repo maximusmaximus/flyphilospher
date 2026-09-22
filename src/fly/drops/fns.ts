@@ -6,16 +6,29 @@ export const listDrops = createServerFn({ method: "GET" }).handler(async () => {
   return readPublicCatalog();
 });
 
+export const designDrop = createServerFn({ method: "POST" })
+  .validator(z.object({ prompt: z.string().min(2).max(240) }))
+  .handler(async ({ data }) => {
+    const { designDrop: design } = await import("./persist.server");
+    return design(data.prompt);
+  });
+
 export const submitDrop = createServerFn({ method: "POST" })
   .validator(
     z.object({
       prompt: z.string().min(2).max(240),
       quality: z.enum(["high", "low"]),
+      enhanced: z.string().max(1500).optional(),
+      mesh: z.unknown().optional(),
     }),
   )
   .handler(async ({ data }) => {
     const { generateDrop } = await import("./persist.server");
-    return generateDrop(data.prompt, data.quality);
+    const designed =
+      data.enhanced && data.mesh
+        ? { enhanced: data.enhanced, mesh: data.mesh as import("./types").MeshSpec }
+        : undefined;
+    return generateDrop(data.prompt, data.quality, designed);
   });
 
 export const settleDrop = createServerFn({ method: "POST" })

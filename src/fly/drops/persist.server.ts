@@ -3,7 +3,8 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nextOpenSlot } from "./schedule";
-import type { Catalog, DropItem } from "./types";
+import type { Catalog, DropItem, MeshSpec } from "./types";
+import { sanitizeMesh } from "./mesh";
 
 const ROOT = process.cwd();
 const DROP_DIR = path.join(ROOT, "public", "drops");
@@ -182,18 +183,18 @@ async function venice(pathName: string, body: unknown, key: string) {
   return res;
 }
 
-async function enhancePrompt(prompt: string, key: string) {
+async function designObject(prompt: string, key: string) {
   const res = await venice(
     "/chat/completions",
     {
       model: "grok-4-7",
       temperature: 0.4,
-      max_tokens: 220,
+      max_tokens: 900,
       messages: [
         {
           role: "system",
           content:
-            "Rewrite the user's idea as one dense prompt for a single isolated physical object. Studio product render, centered, seamless white background, soft contact shadow, no text, no letters, no people, no hands, no frame. Keep it one object a fly could walk up to. Output only the prompt.",
+            "Design one small physical object as JSON only. No markdown. Keys: prompt (one sentence, studio photo, isolated, white background, no text), metalness 0-1, roughness 0-1, depth 0.2-0.9, parts (max 10). Each part: kind ellipsoid|capsule|box|cone, at [x,y,z] from -1 to 1, size [sx,sy,sz] from 0.06 to 1.2, rot [rx,ry,rz] radians, color #rrggbb. y is up. The parts must form a recognizable solid with volume, not a flat card.",
         },
         { role: "user", content: prompt },
       ],
@@ -202,12 +203,56 @@ async function enhancePrompt(prompt: string, key: string) {
   );
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err.slice(0, 280) || "prompt enhancement failed");
+    throw new Error(err.slice(0, 280) || "the solid could not be designed");
   }
   const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const text = json.choices?.[0]?.message?.content?.trim();
-  if (!text) throw new Error("empty enhancement");
-  return text.replace(/^["']|["']$/g, "").slice(0, 1400);
+  const text = json.choices?.[0]?.message?.content?.trim() || "";
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  let parsed: unknown = {};
+  if (start >= 0 && end > start) {
+    try {
+      parsed = JSON.parse(text.slice(start, end + 1));
+    } catch {
+      parsed = {};
+    }
+  }
+  const mesh = sanitizeMesh(parsed);
+  const promptText =
+    parsed && typeof parsed === "object" && typeof (parsed as { prompt?: string }).prompt === "string"
+      ? (parsed as { prompt: string }).prompt
+      : prompt;
+  return {
+    prompt: promptText.replace(/\s+/g, " ").slice(0, 1400),
+    mesh,
+  };
+}
+
+export function designDrop(prompt: string) {
+  return lock(async () => {
+    const clean = prompt.replace(/\s+/g, " ").trim().slice(0, 240);
+    if (clean.length < 2) throw new Error("say what should fall");
+    const spent = await readSpend();
+    if (spent + 0.02 > BUDGET + 1e-6) throw new Error("that's all for today");
+    const key = await readKey();
+    let designed: { prompt: string; mesh: MeshSpec };
+    try {
+      designed = await designObject(clean, key);
+    } catch (err) {
+      throw new Error(friendly(err));
+    }
+    await writeSpend(spent + 0.02);
+    const catalog = await readPublicCatalog();
+    const now = Date.now();
+    const dropAt = catalog.items.length < 10 ? now + 900 : nextOpenSlot(catalog.items.map((item) => item.dropAt), now);
+    return {
+      enhanced: designed.prompt,
+      mesh: designed.mesh,
+      dropAt,
+      spentToday: spent + 0.02,
+      budget: BUDGET,
+    };
+  });
 }
 
 async function generateImage(prompt: string, quality: "high" | "low", key: string) {
@@ -216,12 +261,12 @@ async function generateImage(prompt: string, quality: "high" | "low", key: strin
     "/image/generate",
     {
       model: "grok-imagine-image-quality",
-      prompt,
+      prompt: `${prompt}. Photorealistic, fully three dimensional, one object, seamless white background, no text.`,
       enhance_prompt: true,
       aspect_ratio: "1:1",
       resolution,
       format: "png",
-      negative_prompt: "text, letters, watermark, logo, signature, person, hands, collage, frame, blurry",
+      negative_prompt: "text, letters, watermark, logo, person, hands, collage, frame, blurry, flat icon, pixel art, voxels",
       return_binary: false,
     },
     key,
@@ -256,7 +301,11 @@ function scaleFor(id: string) {
   return 1 + (h % 1000) / 999 * 2;
 }
 
-export function generateDrop(prompt: string, quality: "high" | "low") {
+export function generateDrop(
+  prompt: string,
+  quality: "high" | "low",
+  designed?: { enhanced: string; mesh: MeshSpec },
+) {
   return lock(async () => {
     const clean = prompt.replace(/\s+/g, " ").trim().slice(0, 240);
     if (clean.length < 2) throw new Error("say what should fall");
@@ -270,10 +319,15 @@ export function generateDrop(prompt: string, quality: "high" | "low") {
     if (catalog.items.length >= 10 && catalog.items.filter((item) => item.dropAt > Date.now()).length >= 48) {
       throw new Error("the sky is already full");
     }
-    let drafted = clean;
+    let drafted = designed?.enhanced || clean;
+    let mesh = sanitizeMesh(designed?.mesh);
     let image: { buf: Buffer; enhanced: string };
     try {
-      drafted = await enhancePrompt(clean, key);
+      if (!designed) {
+        const made = await designObject(clean, key);
+        drafted = made.prompt;
+        mesh = made.mesh;
+      }
       image = await generateImage(drafted, quality, key);
     } catch (err) {
       throw new Error(friendly(err));
@@ -308,6 +362,7 @@ export function generateDrop(prompt: string, quality: "high" | "low") {
       ipfs: pin.uri,
       pinned: pin.pinned,
       rest: null,
+      mesh,
     };
     const items = [...catalog.items, item];
     await writeCatalog(items);

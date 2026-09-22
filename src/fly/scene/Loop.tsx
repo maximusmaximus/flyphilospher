@@ -151,6 +151,31 @@ export function Loop() {
     s.object = study ? study.near : 0;
     s.bearing = study ? study.bearing / Math.PI : 0;
     s.novel = study ? study.novel : 0;
+    const stance = f.airborne ? 0 : 1;
+    const limbTouch = (side: number) => {
+      let touch = 0;
+      for (const body of sim.bodies) {
+        if (!body.rest) continue;
+        if (Math.sign(body.x - f.x || side) !== side) continue;
+        const distB = Math.hypot(f.x - body.x, f.z - body.z);
+        if (distB < body.r + 0.09) touch = Math.max(touch, 1 - Math.max(0, distB - body.r) / 0.09);
+      }
+      return touch;
+    };
+    for (let i = 0; i < 6; i++) {
+      const down = Math.sin(f.walkPhase + (i % 2 === 0 ? 0 : Math.PI)) < 0.2 ? 1 : 0.12;
+      const side = i % 2 === 0 ? -1 : 1;
+      const v = stance * (0.2 + down * 0.8) + limbTouch(side) * (i < 2 ? 1 : 0.65);
+      if (i === 0) s.limb0 = v;
+      else if (i === 1) s.limb1 = v;
+      else if (i === 2) s.limb2 = v;
+      else if (i === 3) s.limb3 = v;
+      else if (i === 4) s.limb4 = v;
+      else s.limb5 = v;
+    }
+    s.antenna = THREE.MathUtils.clamp(s.wind * 0.65 + s.object * 0.9 + camSpeed * 0.12, 0, 1.5);
+    s.fur = THREE.MathUtils.clamp(s.wind * 0.8 + Math.abs(flowX) * 0.3 + s.object * 0.4, 0, 1.5);
+    s.wingSense = THREE.MathUtils.clamp((f.airborne ? 0.75 : 0.04) + Math.abs(Math.sin(f.wingPhase)) * (f.airborne ? 0.45 : 0.06), 0, 1.5);
 
     let hit = sim.impact && now - sim.impact.t < 800 ? sim.impact : null;
     if (hit) {

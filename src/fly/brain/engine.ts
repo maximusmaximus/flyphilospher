@@ -98,7 +98,7 @@ export class FlyBrain {
     }
 
     const k = this.kcIdx.length || 1;
-    this.featScale = new Float32Array(k * 24);
+    this.featScale = new Float32Array(k * 26);
     for (let i = 0; i < this.featScale.length; i++) {
       this.featScale[i] = Math.sin((i + 1) * 2.399) * 1.15;
     }
@@ -166,7 +166,9 @@ export class FlyBrain {
       s.object,
       s.bearing,
       s.novel,
-      s.air,
+      s.antenna,
+      s.fur,
+      s.wingSense,
     ];
 
     let kcCursor = 0;
@@ -220,10 +222,10 @@ export class FlyBrain {
             s.air * 1.15 + s.openSpace * 0.55 + s.height * 0.35,
             s.glass * 1.1 + s.bounce * 1.35 + s.edge * 0.55,
           ];
-          const base = kcCursor * 24;
+          const base = kcCursor * 26;
           let h = 0;
           let nrm = 0;
-          for (let j = 0; j < 24; j++) {
+          for (let j = 0; j < 26; j++) {
             const k = this.featScale[base + j] ?? 0;
             h += k * (feats[j] ?? 0);
             nrm += Math.abs(k);
@@ -241,21 +243,23 @@ export class FlyBrain {
           ext[i] = 0.12 + 1.55 * Math.max(0, -this.valence) + 0.35 * s.bounce + 0.55 * s.loom * s.camDist;
           break;
         case ROLE.wind:
-          ext[i] = 0.95 * s.wind + 0.2 * s.user;
+          ext[i] = 0.85 * s.antenna + 0.55 * s.fur + 0.2 * s.wind;
           break;
         case ROLE.wing_power:
         case ROLE.wing_steer:
-          ext[i] = 0.05 * s.openSpace + 0.12 * s.air;
+          ext[i] = 0.15 * s.openSpace + 0.7 * s.wingSense + 0.12 * s.air;
           break;
         case ROLE.haltere:
-          ext[i] = 0.2 * s.air + 0.08 * Math.abs(s.flowX);
+          ext[i] = 0.25 * s.air + 0.85 * s.wingSense + 0.08 * Math.abs(s.flowX);
           break;
         case ROLE.neck:
           ext[i] = 0.2 * Math.abs(s.camAz) + 0.15 * s.mirrorFly;
           break;
-        case ROLE.leg:
-          ext[i] = 0.35 * s.tarsal + 0.5 * s.object * s.tarsal + 0.2 * s.edge;
+        case ROLE.leg: {
+          const limb = [s.limb0, s.limb1, s.limb2, s.limb3, s.limb4, s.limb5][i % 6] ?? s.tarsal;
+          ext[i] = 0.12 + limb * 1.2 + 0.15 * s.fur * s.tarsal;
           break;
+        }
         default:
           ext[i] = 0.035;
       }

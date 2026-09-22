@@ -106,4 +106,13 @@ export type SenseInput = {
   object: number;
   bearing: number;
   novel: number;
+  antenna: number;
+  fur: number;
+  wingSense: number;
+  limb0: number;
+  limb1: number;
+  limb2: number;
+  limb3: number;
+  limb4: number;
+  limb5: number;
 };

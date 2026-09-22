@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react";
-import { listDrops, submitDrop } from "../drops/fns";
+import { designDrop, listDrops, submitDrop } from "../drops/fns";
 import { formatCountdown, nextDropAt } from "../drops/schedule";
 import type { DropItem } from "../drops/types";
 import { detectQuality } from "../quality";
 import { sim } from "../sim";
 
 const STEPS = [
-  "Drag to look around the pedestal. Pinch or scroll to move closer. The view stays on the room, not glued to the fly.",
-  "Lean in and it startles. Back away and it lands. The glass is solid — it will not pass through.",
-  "The orb at the lower right is its brain. Gold is dopamine. It is learning this room, not a movie.",
-  "Type something at the top. The prompt is rewritten, then turned into a small object. One or two fall each hour.",
-  "They stay. Tap one — the box around it means it is selected — to see what it is and when it fell. The mirror grows as the stone fills.",
-  "The strip at the lower left is what the fly is doing, as it happens.",
+  "Drag to look around. Pinch or scroll to come closer. The view stays on the room.",
+  "Lean in and the fly leaves the stone. Back away and it lands. It will not pass through the glass.",
+  "Each leg, the hairs, the antennae, and the wings report into the brain at the lower right.",
+  "Type something. You will see it rewritten, shaped as a solid, then painted, and when it falls.",
+  "Tap an object to see what it is. The mirror grows as the stone fills. The fly remembers the shapes.",
 ];
 
 export function Chrome() {
@@ -25,6 +24,8 @@ export function Chrome() {
   const [help, setHelp] = useState(0);
   const [openHelp, setOpenHelp] = useState(false);
   const [mobile, setMobile] = useState(false);
+  const [phase, setPhase] = useState("");
+  const [phaseWhen, setPhaseWhen] = useState<number | null>(null);
 
   useEffect(() => {
     const apply = () => setMobile(detectQuality().mobile || window.innerWidth < 820);
@@ -75,14 +76,32 @@ export function Chrome() {
     if (text.length < 2 || busy) return;
     setBusy(true);
     setError("");
+    setPhase("Rewriting the idea");
+    setPhaseWhen(null);
     try {
       const quality = detectQuality().mobile ? "low" : "high";
-      const result = await submitDrop({ data: { prompt: text, quality } });
+      const designed = await designDrop({ data: { prompt: text } });
+      setPhase(`Shaping ${designed.mesh.parts.length} parts`);
+      setPhaseWhen(designed.dropAt);
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      setPhase("Painting the surface");
+      const result = await submitDrop({
+        data: { prompt: text, quality, enhanced: designed.enhanced, mesh: designed.mesh },
+      });
+      const soon = result.item.dropAt <= Date.now() + 2000;
+      setPhase(soon ? "Falling now" : "Waiting to fall");
+      setPhaseWhen(result.item.dropAt);
       sim.drops = [...sim.drops.filter((item) => item.id !== result.item.id), result.item];
       setItems(sim.drops);
       setPrompt("");
-      sim.say(`${result.item.prompt} is waiting in the sky.`);
+      sim.say(soon ? `${result.item.prompt} is falling.` : `${result.item.prompt} is waiting in the sky.`);
+      window.setTimeout(() => {
+        setPhase("");
+        setPhaseWhen(null);
+      }, 4000);
     } catch (err) {
+      setPhase("");
+      setPhaseWhen(null);
       setError(err instanceof Error ? err.message : "it could not be made");
     } finally {
       setBusy(false);
@@ -91,27 +110,36 @@ export function Chrome() {
 
   return (
     <>
-      <div className="pointer-events-none absolute inset-0 z-10" data-fly-ui>
-        <div
-          className="pointer-events-auto absolute left-1/2 flex -translate-x-1/2 gap-2"
+      <div className="pointer-events-none absolute inset-0 z-10">
+        <button
+          type="button"
+          data-fly-ui
+          aria-label="Guide"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => {
+            setHelp(0);
+            setOpenHelp(true);
+          }}
+          className="pointer-events-auto absolute grid h-12 w-12 place-items-center rounded-full border border-ivory/70 bg-void text-base text-ivory"
           style={{
-            top: "max(10px, env(safe-area-inset-top))",
-            width: mobile ? "calc(100% - 16px)" : "min(760px, calc(100% - 32px))",
-            flexDirection: mobile ? "column" : "row",
-            alignItems: mobile ? "stretch" : "center",
+            top: "max(12px, env(safe-area-inset-top))",
+            left: "max(12px, env(safe-area-inset-left))",
+            zIndex: 40,
           }}
         >
-          <button
-            type="button"
-            aria-label="What this is"
-            onClick={() => {
-              setHelp(0);
-              setOpenHelp(true);
-            }}
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-ivory/30 bg-void/80 text-[15px] tracking-wide text-ivory"
-          >
-            i*
-          </button>
+          i*
+        </button>
+        <div
+          data-fly-ui
+          className="pointer-events-auto absolute flex gap-2"
+          style={{
+            top: "max(10px, env(safe-area-inset-top))",
+            left: mobile ? "max(64px, calc(env(safe-area-inset-left) + 60px))" : "max(72px, env(safe-area-inset-left))",
+            right: "max(10px, env(safe-area-inset-right))",
+            flexDirection: mobile ? "column" : "row",
+            alignItems: "stretch",
+          }}
+        >
           <form
             className="flex min-w-0 flex-1 gap-2"
             onSubmit={(e) => {
@@ -136,9 +164,11 @@ export function Chrome() {
             </button>
           </form>
           <div className="rounded-2xl border border-ivory/20 bg-void/80 px-3 py-1.5 text-ivory">
-            <div className="font-mono text-[13px] tabular-nums tracking-[0.14em]">{free && !upcoming ? "now" : formatCountdown(nextAt - now)}</div>
-            <div className="max-w-[180px] truncate text-[11px] text-fog">
-              {upcoming ? upcoming.prompt : free ? "drops right away" : "next opening"}
+            <div className="font-mono text-[13px] tabular-nums tracking-[0.14em]">
+              {phaseWhen ? (phaseWhen <= now + 1500 ? "now" : formatCountdown(phaseWhen - now)) : free && !upcoming ? "now" : formatCountdown(nextAt - now)}
+            </div>
+            <div className="max-w-[200px] truncate text-[11px] text-fog">
+              {phase || (upcoming ? upcoming.prompt : free ? "drops right away" : "next opening")}
             </div>
           </div>
         </div>
@@ -160,8 +190,8 @@ export function Chrome() {
             maxHeight: mobile ? "28dvh" : "36dvh",
           }}
         >
-          {notes.slice(-6).map((note) => (
-            <p key={note.t + note.text} className="rounded-2xl bg-void/75 px-3 py-1.5 text-[12px] leading-snug text-ivory/90">
+          {notes.slice(-3).map((note) => (
+            <p key={note.t + note.text} className="rounded-2xl bg-void/75 px-2.5 py-1 text-[10px] leading-snug text-ivory/90">
               {note.text}
             </p>
           ))}

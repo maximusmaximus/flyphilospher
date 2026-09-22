@@ -80,7 +80,7 @@ function Piece({ item }: { item: DropItem }) {
     img.crossOrigin = "anonymous";
     img.onload = () => {
       if (gone) return;
-      const sculpt = sculptFromImage(img, FLY_SIZE * item.scale);
+      const sculpt = sculptFromImage(img, FLY_SIZE * item.scale, item.mesh);
       const emb = topologyFromImage(img);
       const body = bodies.get(item.id);
       if (body && emb) body.emb = emb;
