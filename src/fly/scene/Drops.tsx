@@ -4,6 +4,8 @@ import * as THREE from "three";
 import { settleDrop } from "../drops/fns";
 import { sculptFromImage } from "../drops/sculpt";
 import type { DropItem } from "../drops/types";
+import { clearFly } from "./clear";
+import { topologyFromImage } from "../memory/topology";
 import { FLY_SIZE, MIRROR_CLEAR, PEDESTAL_H, PEDESTAL_R, sim } from "../sim";
 
 type Body = {
@@ -19,9 +21,11 @@ type Body = {
   rest: boolean;
   saved: boolean;
   calm: number;
+  emb?: number[];
 };
 
 const bodies = new Map<string, Body>();
+let lastNudge = 0;
 
 function hash(id: string) {
   let h = 0;
@@ -77,6 +81,9 @@ function Piece({ item }: { item: DropItem }) {
     img.onload = () => {
       if (gone) return;
       const sculpt = sculptFromImage(img, FLY_SIZE * item.scale);
+      const emb = topologyFromImage(img);
+      const body = bodies.get(item.id);
+      if (body && emb) body.emb = emb;
       if (!sculpt) return;
       mesh.clear();
       mesh.add(sculpt);
@@ -213,23 +220,18 @@ export function Drops() {
 
     const flyR = FLY_SIZE * 0.42;
     const f = sim.fly;
-    for (const b of list) {
-      const dx = f.x - b.x;
-      const dy = f.y - b.y;
-      const dz = f.z - b.z;
-      const dist = Math.hypot(dx, dy, dz) || 1e-4;
-      const min = flyR + b.r * 0.65;
-      if (dist >= min) continue;
-      const nx = dx / dist;
-      const nz = dz / dist;
-      const push = min - dist;
-      f.x += nx * push * 0.65;
-      f.z += nz * push * 0.65;
-      b.x -= nx * push * 0.45;
-      b.z -= nz * push * 0.45;
-      b.vx -= nx * 0.15;
-      b.vz -= nz * 0.15;
-      b.rest = false;
+    const nudge = clearFly(f, list, flyR);
+    if (nudge && Date.now() - lastNudge > 900) {
+      lastNudge = Date.now();
+      sim.say(nudge.hop ? `${nudge.name} falls beside it.` : `It steps aside for ${nudge.name}.`);
+      sim.impact = { name: nudge.name, force: nudge.force, t: Date.now() };
+    }
+    if (nudge?.hop && !f.airborne) {
+      f.airborne = true;
+      f.hop = true;
+      f.airTime = 0;
+      f.landLock = 0.28;
+      f.vy = 0.28 + nudge.force * 0.35;
     }
 
     for (const b of list) {
@@ -255,7 +257,17 @@ export function Drops() {
       }
     }
 
-    sim.bodies = list.map((b) => ({ id: b.id, name: b.name, x: b.x, y: b.y, z: b.z, r: b.r }));
+    sim.bodies = list.map((b) => ({
+      id: b.id,
+      name: b.name,
+      x: b.x,
+      y: b.y,
+      z: b.z,
+      r: b.r,
+      rest: b.rest,
+      vy: b.vy,
+      emb: b.emb,
+    }));
   });
 
   return (

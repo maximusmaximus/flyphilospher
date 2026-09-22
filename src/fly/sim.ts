@@ -58,6 +58,9 @@ export const sim = {
     leftLight: 0.5,
     rightLight: 0.5,
     air: 0,
+    object: 0,
+    bearing: 0,
+    novel: 0,
   } as SenseInput,
   fly: {
     x: 0.12,
@@ -75,6 +78,7 @@ export const sim = {
     headYaw: 0,
     airTime: 0,
     landLock: 0,
+    hop: false,
   },
   cam: {
     x: 0.48,
@@ -92,7 +96,18 @@ export const sim = {
     mirrorH: MIRROR_H,
   },
   drops: [] as DropItem[],
-  bodies: [] as Array<{ id: string; name: string; x: number; y: number; z: number; r: number }>,
+  bodies: [] as Array<{
+    id: string;
+    name: string;
+    x: number;
+    y: number;
+    z: number;
+    r: number;
+    rest: boolean;
+    vy: number;
+    emb?: number[];
+  }>,
+  impact: null as null | { name: string; force: number; t: number },
   selected: null as string | null,
   pointer: { drag: 0 },
   notes: [] as Array<{ t: number; text: string }>,

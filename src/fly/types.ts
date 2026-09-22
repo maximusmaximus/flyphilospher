@@ -103,4 +103,7 @@ export type SenseInput = {
   leftLight: number;
   rightLight: number;
   air: number;
+  object: number;
+  bearing: number;
+  novel: number;
 };

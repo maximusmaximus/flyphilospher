@@ -98,7 +98,7 @@ export class FlyBrain {
     }
 
     const k = this.kcIdx.length || 1;
-    this.featScale = new Float32Array(k * 20);
+    this.featScale = new Float32Array(k * 24);
     for (let i = 0; i < this.featScale.length; i++) {
       this.featScale[i] = Math.sin((i + 1) * 2.399) * 1.15;
     }
@@ -163,6 +163,10 @@ export class FlyBrain {
       s.air,
       Math.cos(s.camAz) * 0.5 + 0.5,
       s.camEl,
+      s.object,
+      s.bearing,
+      s.novel,
+      s.air,
     ];
 
     let kcCursor = 0;
@@ -191,10 +195,10 @@ export class FlyBrain {
           ext[i] = 1.35 * s.loom + 0.12 * s.wind + 0.35 * s.camDist;
           break;
         case ROLE.small_object:
-          ext[i] = 1.2 * s.mirrorFly * (1 - 0.55 * s.loom) + 0.2 * s.facingMirror;
+          ext[i] = 1.15 * s.object + 0.7 * s.mirrorFly * (1 - 0.55 * s.loom) + 0.2 * s.facingMirror;
           break;
         case ROLE.tracker:
-          ext[i] = 0.85 * s.mirrorFly + 0.28 * Math.abs(s.flowX) + 0.2 * s.facingMirror;
+          ext[i] = 0.9 * s.object + 0.55 * Math.abs(s.bearing) + 0.45 * s.mirrorFly + 0.2 * s.facingMirror;
           break;
         case ROLE.giant_fiber:
           ext[i] = 1.6 * s.loom + 0.15 * s.wind + 0.45 * s.camDist * s.user;
@@ -203,7 +207,7 @@ export class FlyBrain {
           ext[i] = 0.28 * s.openSpace + 0.22 * Math.abs(s.flowX) + 0.18 * s.mirrorFly + 0.2 * s.air;
           break;
         case ROLE.walk_fwd:
-          ext[i] = 0.42 * s.tarsal * (1 - s.loom) + 0.22 * s.mirrorFly + 0.12 * (1 - s.edge);
+          ext[i] = 0.42 * s.tarsal * (1 - s.loom) + 0.5 * s.object * s.tarsal + 0.22 * s.mirrorFly + 0.12 * (1 - s.edge);
           break;
         case ROLE.walk_back:
           ext[i] = 0.65 * s.loom * s.tarsal + 0.22 * s.wind + 0.35 * s.edge;
@@ -216,10 +220,10 @@ export class FlyBrain {
             s.air * 1.15 + s.openSpace * 0.55 + s.height * 0.35,
             s.glass * 1.1 + s.bounce * 1.35 + s.edge * 0.55,
           ];
-          const base = kcCursor * 20;
+          const base = kcCursor * 24;
           let h = 0;
           let nrm = 0;
-          for (let j = 0; j < 20; j++) {
+          for (let j = 0; j < 24; j++) {
             const k = this.featScale[base + j] ?? 0;
             h += k * (feats[j] ?? 0);
             nrm += Math.abs(k);
@@ -250,7 +254,7 @@ export class FlyBrain {
           ext[i] = 0.2 * Math.abs(s.camAz) + 0.15 * s.mirrorFly;
           break;
         case ROLE.leg:
-          ext[i] = 0.35 * s.tarsal + 0.2 * s.edge;
+          ext[i] = 0.35 * s.tarsal + 0.5 * s.object * s.tarsal + 0.2 * s.edge;
           break;
         default:
           ext[i] = 0.035;

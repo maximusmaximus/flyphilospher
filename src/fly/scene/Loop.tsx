@@ -2,6 +2,8 @@ import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { buzz } from "../audio/buzz";
+import { flushMemory, memoryAim, novelty, poseQuery, remember, sectorId } from "../memory/bank";
+import { viewOf } from "../memory/topology";
 import { FLIGHT_CEILING, MIRROR_CLEAR, MIRROR_H, MIRROR_W, PEDESTAL_H, PEDESTAL_R, TOUCH_DIST, sim } from "../sim";
 
 const CAM = new THREE.Vector3();
@@ -43,6 +45,7 @@ export function Loop() {
   const born = useRef(performance.now());
   const bounceMem = useRef(0);
   const saveAcc = useRef(0);
+  const learnAcc = useRef(0);
 
   useFrame((_, delta) => {
     const now = Date.now();
@@ -89,6 +92,40 @@ export function Loop() {
     const leftLight = THREE.MathUtils.clamp(0.35 + 0.55 * Math.max(0, Math.sin(camAz)) + 0.2 * (CAM.x < f.x ? 1 : 0), 0, 1.2);
     const rightLight = THREE.MathUtils.clamp(0.35 + 0.55 * Math.max(0, -Math.sin(camAz)) + 0.2 * (CAM.x > f.x ? 1 : 0), 0, 1.2);
 
+    let study: {
+      id: string;
+      name: string;
+      tx: number;
+      tz: number;
+      bearing: number;
+      near: number;
+      emb?: number[];
+      novel: number;
+    } | null = null;
+    let bestReach = 1e9;
+    for (const body of sim.bodies) {
+      if (!body.rest) continue;
+      const dx = f.x - body.x;
+      const dz = f.z - body.z;
+      const distB = Math.hypot(dx, dz);
+      const reach = body.r + 0.2;
+      if (distB > reach || distB >= bestReach) continue;
+      bestReach = distB;
+      const bearing = Math.atan2(dz, dx);
+      const ring = body.r + 0.07;
+      const emb = body.emb ? viewOf(body.emb, bearing) : undefined;
+      study = {
+        id: body.id,
+        name: body.name,
+        tx: body.x + Math.cos(bearing + 0.72) * ring,
+        tz: body.z + Math.sin(bearing + 0.72) * ring,
+        bearing,
+        near: THREE.MathUtils.clamp(1 - Math.max(0, distB - body.r) / 0.18, 0, 1),
+        emb,
+        novel: emb ? novelty(emb, body.name) : 0.55,
+      };
+    }
+
     bounceMem.current *= Math.exp(-d * 4.5);
     const s = sim.sense;
     s.loom = loom;
@@ -111,6 +148,27 @@ export function Loop() {
     s.leftLight = leftLight;
     s.rightLight = rightLight;
     s.air = f.airborne ? 1 : 0;
+    s.object = study ? study.near : 0;
+    s.bearing = study ? study.bearing / Math.PI : 0;
+    s.novel = study ? study.novel : 0;
+
+    let hit = sim.impact && now - sim.impact.t < 800 ? sim.impact : null;
+    if (hit) {
+      sim.impact = null;
+      const body = sim.bodies.find((item) => item.name === hit!.name);
+      if (body?.emb) {
+        remember({
+          id: `${body.id}:hit`,
+          label: body.name,
+          emb: viewOf(body.emb, Math.atan2(f.z - body.z, f.x - body.x)),
+          x: f.x,
+          y: f.y,
+          z: f.z,
+          valence: -0.75 * hit.force,
+          visits: 1,
+        });
+      }
+    }
 
     const punish =
       loom * 0.7 +
@@ -129,6 +187,7 @@ export function Loop() {
 
     brain.sense(s);
     brain.teach(valence, d);
+    if (hit) brain.teach(-0.7 * hit.force, 0.05);
     acc.current += d;
     const step = 1 / 120;
     let guard = 0;
@@ -165,12 +224,14 @@ export function Loop() {
     if (f.airborne) f.airTime += d;
 
     const landCalm = dist > 0.5 && loom < 0.28 && m.giantFiber < 0.14 && sim.cam.radius > 0.3 && !touching;
-    if (f.airborne && f.airTime > 1.7 && f.landLock <= 0 && landCalm) {
+    const hopDown = f.hop && f.airTime > 0.38 && f.y < PEDESTAL_H + 0.1;
+    if (f.airborne && f.landLock <= 0 && (hopDown || (f.airTime > 1.7 && landCalm))) {
       if (f.y < PEDESTAL_H + 0.3) {
         f.airborne = false;
         f.vy = 0;
         f.y = PEDESTAL_H + 0.006;
         f.landLock = 1.1;
+        f.hop = false;
         brain.teach(0.85, 0.05);
         sim.say("It settles on the stone again.");
       } else {
@@ -215,6 +276,18 @@ export function Loop() {
       DESIRED.x += Math.cos(ang) * 0.28;
       DESIRED.z += Math.sin(ang) * 0.28;
       if (learned > 0.15) DESIRED.addScaledVector(TO_PERCH, learned * 0.35);
+    }
+    if (study && !f.airborne && loom < 0.55) {
+      const pull = 0.5 + m.smallObject * 0.85 + m.tracker * 0.45 + study.novel * 0.4;
+      DESIRED.x += (study.tx - f.x) * pull;
+      DESIRED.z += (study.tz - f.z) * pull;
+    }
+    const aim = memoryAim();
+    if (aim && !f.airborne && loom < 0.4 && (!study || study.near < 0.3)) {
+      const sign = aim.valence >= 0 ? 1 : -1;
+      const pull = 0.35 + Math.min(0.7, Math.abs(aim.valence));
+      DESIRED.x += (aim.x - f.x) * sign * pull;
+      DESIRED.z += (aim.z - f.z) * sign * pull;
     }
 
     if (DESIRED.lengthSq() > 1e-6) DESIRED.normalize();
@@ -279,6 +352,23 @@ export function Loop() {
     f.vx = bouncedY.vx;
     f.vz = bouncedY.vz;
     if (bouncedY.hit > 0) bounceMem.current = Math.min(1, bounceMem.current + bouncedY.hit);
+
+    learnAcc.current += d;
+    if (study?.emb && study.near > 0.45 && !f.airborne && loom < 0.5 && learnAcc.current > 0.75) {
+      learnAcc.current = 0;
+      remember({
+        id: sectorId(study.id, study.bearing),
+        label: study.name,
+        emb: study.emb,
+        x: study.tx,
+        y: f.y,
+        z: study.tz,
+        valence: 0.25 + study.near * 0.35,
+        visits: 1,
+      });
+      sim.say(`It learns the shape of ${study.name}.`);
+    }
+    flushMemory(poseQuery(f.x, f.z, study?.emb, study?.bearing ?? f.yaw));
 
     sim.cam.moving = camSpeed;
 
