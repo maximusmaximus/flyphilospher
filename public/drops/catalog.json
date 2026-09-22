@@ -13,6 +13,236 @@
       "ipfs": "ipfs://bafkreihdeipaazonznioxe3hfno5tqeoeq5hj5u5t6r3e66sgwzfw2swc4",
       "pinned": false,
       "rest": null
+    },
+    {
+      "id": "mmud65xnc",
+      "cid": "bafkreieunpmadz4yyupiknoqjetcylekb7g6t2pn73hss62fqf3gsdlkra",
+      "prompt": "a small cat",
+      "enhanced": "Photorealistic three-dimensional studio product photography of a small, isolated orange tabby cat figurine with glossy ceramic texture and painted black stripes, standing on a smooth white seamless background, soft even lighting highlighting the curve of the back and the detailed whiskers, shallow depth of field to keep the subject sharp while blurring the edges, high resolution, commercial product shot style.",
+      "createdAt": 1790111495064,
+      "dropAt": 1790111494576,
+      "scale": 1.9589589589589589,
+      "image": "/drops/bafkreieunpmadz4yyupiknoqjetcylekb7g6t2pn73hss62fqf3gsdlkra.png",
+      "github": null,
+      "ipfs": "ipfs://bafkreieunpmadz4yyupiknoqjetcylekb7g6t2pn73hss62fqf3gsdlkra",
+      "pinned": false,
+      "rest": null,
+      "mesh": {
+        "metalness": 0.04,
+        "roughness": 0.82,
+        "depth": 0.58,
+        "parts": [
+          {
+            "kind": "ellipsoid",
+            "at": [
+              0.02,
+              0.4,
+              0
+            ],
+            "size": [
+              0.62,
+              0.34,
+              0.32
+            ],
+            "rot": [
+              0,
+              0,
+              0.08
+            ],
+            "color": "#d4843c"
+          },
+          {
+            "kind": "ellipsoid",
+            "at": [
+              0.4,
+              0.56,
+              0
+            ],
+            "size": [
+              0.3,
+              0.28,
+              0.26
+            ],
+            "rot": [
+              0,
+              0,
+              0.15
+            ],
+            "color": "#e09248"
+          },
+          {
+            "kind": "ellipsoid",
+            "at": [
+              0.56,
+              0.5,
+              0
+            ],
+            "size": [
+              0.14,
+              0.12,
+              0.14
+            ],
+            "rot": [
+              0,
+              0,
+              0
+            ],
+            "color": "#f2c9a0"
+          },
+          {
+            "kind": "cone",
+            "at": [
+              0.34,
+              0.76,
+              0.1
+            ],
+            "size": [
+              0.1,
+              0.18,
+              0.08
+            ],
+            "rot": [
+              0.25,
+              0,
+              0.15
+            ],
+            "color": "#c46e30"
+          },
+          {
+            "kind": "cone",
+            "at": [
+              0.34,
+              0.76,
+              -0.1
+            ],
+            "size": [
+              0.1,
+              0.18,
+              0.08
+            ],
+            "rot": [
+              -0.25,
+              0,
+              0.15
+            ],
+            "color": "#c46e30"
+          },
+          {
+            "kind": "ellipsoid",
+            "at": [
+              0.62,
+              0.48,
+              0
+            ],
+            "size": [
+              0.08,
+              0.08,
+              0.08
+            ],
+            "rot": [
+              0,
+              0,
+              0
+            ],
+            "color": "#3a2822"
+          },
+          {
+            "kind": "capsule",
+            "at": [
+              -0.38,
+              0.62,
+              0.02
+            ],
+            "size": [
+              0.1,
+              0.48,
+              0.1
+            ],
+            "rot": [
+              0.15,
+              0,
+              1.05
+            ],
+            "color": "#d07838"
+          },
+          {
+            "kind": "capsule",
+            "at": [
+              0.22,
+              0.17,
+              0.12
+            ],
+            "size": [
+              0.1,
+              0.34,
+              0.1
+            ],
+            "rot": [
+              0,
+              0,
+              0
+            ],
+            "color": "#c87834"
+          },
+          {
+            "kind": "capsule",
+            "at": [
+              0.22,
+              0.17,
+              -0.12
+            ],
+            "size": [
+              0.1,
+              0.34,
+              0.1
+            ],
+            "rot": [
+              0,
+              0,
+              0
+            ],
+            "color": "#c87834"
+          },
+          {
+            "kind": "capsule",
+            "at": [
+              -0.2,
+              0.17,
+              0.12
+            ],
+            "size": [
+              0.11,
+              0.34,
+              0.11
+            ],
+            "rot": [
+              0,
+              0,
+              0.05
+            ],
+            "color": "#c07030"
+          },
+          {
+            "kind": "capsule",
+            "at": [
+              -0.2,
+              0.17,
+              -0.12
+            ],
+            "size": [
+              0.11,
+              0.34,
+              0.11
+            ],
+            "rot": [
+              0,
+              0,
+              0.05
+            ],
+            "color": "#c07030"
+          }
+        ]
+      }
     }
   ]
 }
