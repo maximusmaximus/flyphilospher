@@ -1,14 +1,16 @@
 import type { MotorReadout, SenseInput } from "./types";
+import type { DropItem } from "./drops/types";
 import { FlyBrain } from "./brain/engine";
 
 export const PEDESTAL_R = 0.46;
 export const PEDESTAL_H = 0.9;
 export const MIRROR_H = 0.98;
 export const MIRROR_W = 0.3;
-export const MIRROR_CLEAR = 0.055;
+export const MIRROR_CLEAR = 0.12;
 export const FLY_LEN = 0.026;
+export const FLY_SIZE = 0.15;
 export const FLIGHT_CEILING = 1.15;
-export const TOUCH_DIST = 0.2;
+export const TOUCH_DIST = 0.22;
 
 const motorZero = (): MotorReadout => ({
   looming: 0,
@@ -85,6 +87,21 @@ export const sim = {
     user: false,
   },
   started: false,
+  stage: {
+    mirrorW: MIRROR_W,
+    mirrorH: MIRROR_H,
+  },
+  drops: [] as DropItem[],
+  bodies: [] as Array<{ id: string; name: string; x: number; y: number; z: number; r: number }>,
+  selected: null as string | null,
+  pointer: { drag: 0 },
+  notes: [] as Array<{ t: number; text: string }>,
+  say(text: string) {
+    const recent = sim.notes.some((note) => note.text === text && Date.now() - note.t < 20000);
+    if (recent) return;
+    sim.notes.push({ t: Date.now(), text });
+    if (sim.notes.length > 14) sim.notes.shift();
+  },
 };
 
 export type Sim = typeof sim;

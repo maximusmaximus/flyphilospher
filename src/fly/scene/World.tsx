@@ -1,7 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import { ContactShadows, Environment, MeshReflectorMaterial } from "@react-three/drei";
 import * as THREE from "three";
-import { MIRROR_H, MIRROR_W, PEDESTAL_H, PEDESTAL_R } from "../sim";
+import { MIRROR_H, MIRROR_W, PEDESTAL_H, PEDESTAL_R, sim } from "../sim";
+import { quality } from "../quality";
 import { makeStone } from "./textures";
 
 function SkyDome() {
@@ -49,6 +51,58 @@ function Dust() {
   );
 }
 
+function Mirror() {
+  const group = useRef<THREE.Group>(null);
+  const blur = quality.mobile ? 24 : 80;
+  useFrame(() => {
+    if (!group.current) return;
+    const w = sim.stage.mirrorW;
+    const h = sim.stage.mirrorH;
+    group.current.position.y = PEDESTAL_H + h * 0.5;
+    group.current.scale.set(w / MIRROR_W, h / MIRROR_H, 1);
+  });
+  return (
+    <group ref={group} position={[0, PEDESTAL_H + MIRROR_H * 0.5, 0]}>
+      <mesh position={[0, 0, 0.008]} castShadow>
+        <planeGeometry args={[MIRROR_W, MIRROR_H]} />
+        <MeshReflectorMaterial
+          blur={[blur, blur * 0.5]}
+          resolution={quality.reflector}
+          mixBlur={0.45}
+          mixStrength={2.4}
+          mirror={0.88}
+          roughness={0.12}
+          metalness={0.85}
+          color="#d5ddd8"
+          depthScale={0.35}
+          minDepthThreshold={0.25}
+          maxDepthThreshold={1.1}
+        />
+      </mesh>
+      <mesh position={[0, 0, -0.008]} rotation={[0, Math.PI, 0]} castShadow>
+        <planeGeometry args={[MIRROR_W, MIRROR_H]} />
+        <MeshReflectorMaterial
+          blur={[blur, blur * 0.5]}
+          resolution={quality.reflector}
+          mixBlur={0.45}
+          mixStrength={2.4}
+          mirror={0.88}
+          roughness={0.12}
+          metalness={0.85}
+          color="#d5ddd8"
+          depthScale={0.35}
+          minDepthThreshold={0.25}
+          maxDepthThreshold={1.1}
+        />
+      </mesh>
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={[MIRROR_W + 0.02, MIRROR_H + 0.02, 0.012]} />
+        <meshStandardMaterial color="#6a5346" metalness={0.55} roughness={0.38} />
+      </mesh>
+    </group>
+  );
+}
+
 export function World() {
   const stone = useMemo(() => makeStone(), []);
   const stoneMat = useMemo(
@@ -73,19 +127,20 @@ export function World() {
         intensity={2.1}
         color="#fff4e6"
         castShadow
-        shadow-mapSize={[1024, 1024]}
-        shadow-bias={-0.0002}
-        shadow-camera-near={0.5}
-        shadow-camera-far={12}
-        shadow-camera-left={-3}
-        shadow-camera-right={3}
-        shadow-camera-top={3}
-        shadow-camera-bottom={-3}
+        shadow-mapSize={[quality.shadow, quality.shadow]}
+        shadow-bias={-0.00035}
+        shadow-normalBias={0.02}
+        shadow-camera-near={0.4}
+        shadow-camera-far={16}
+        shadow-camera-left={-2.2}
+        shadow-camera-right={2.2}
+        shadow-camera-top={2.4}
+        shadow-camera-bottom={-2.2}
       />
       <directionalLight position={[-2.2, 1.6, -2]} intensity={0.55} color="#8aa8a8" />
       <pointLight position={[0.1, 1.7, 0.5]} intensity={0.55} color="#f0e6d8" distance={4} />
 
-      <Environment resolution={128}>
+      <Environment resolution={quality.reflector}>
         <mesh scale={20}>
           <sphereGeometry args={[1, 24, 16]} />
           <meshBasicMaterial color="#b7c2be" side={THREE.BackSide} />
@@ -113,44 +168,7 @@ export function World() {
         </mesh>
       </group>
 
-      <group position={[0, PEDESTAL_H + MIRROR_H * 0.5, 0]}>
-        <mesh position={[0, 0, 0.008]} castShadow>
-          <planeGeometry args={[MIRROR_W, MIRROR_H]} />
-          <MeshReflectorMaterial
-            blur={[60, 30]}
-            resolution={256}
-            mixBlur={0.45}
-            mixStrength={2.4}
-            mirror={0.88}
-            roughness={0.12}
-            metalness={0.85}
-            color="#d5ddd8"
-            depthScale={0.35}
-            minDepthThreshold={0.25}
-            maxDepthThreshold={1.1}
-          />
-        </mesh>
-        <mesh position={[0, 0, -0.008]} rotation={[0, Math.PI, 0]} castShadow>
-          <planeGeometry args={[MIRROR_W, MIRROR_H]} />
-          <MeshReflectorMaterial
-            blur={[60, 30]}
-            resolution={256}
-            mixBlur={0.45}
-            mixStrength={2.4}
-            mirror={0.88}
-            roughness={0.12}
-            metalness={0.85}
-            color="#d5ddd8"
-            depthScale={0.35}
-            minDepthThreshold={0.25}
-            maxDepthThreshold={1.1}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0]}>
-          <boxGeometry args={[MIRROR_W + 0.02, MIRROR_H + 0.02, 0.01]} />
-          <meshStandardMaterial color="#6a5346" metalness={0.55} roughness={0.38} />
-        </mesh>
-      </group>
+      <Mirror />
 
       <ContactShadows
         position={[0, PEDESTAL_H + 0.001, 0]}

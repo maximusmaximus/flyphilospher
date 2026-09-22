@@ -31,6 +31,13 @@
     display: block;
   }
 
+  input,
+  textarea {
+    user-select: text;
+    -webkit-user-select: text;
+    touch-action: auto;
+  }
+
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;

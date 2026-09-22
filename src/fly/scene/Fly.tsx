@@ -110,7 +110,7 @@ export function FlyMesh() {
       sheen: 0.7,
       sheenColor: new THREE.Color("#6a5040"),
       sheenRoughness: 0.55,
-      clearcoat: 0.22,
+      clearcoat: 0.45,
       clearcoatRoughness: 0.45,
     });
     const dark = new THREE.MeshPhysicalMaterial({
@@ -282,7 +282,7 @@ export function FlyMesh() {
   });
 
   return (
-    <group ref={group} scale={0.024}>
+    <group ref={group} scale={0.072}>
       <group position={[0, 0.22, 0.08]}>
         <mesh material={mats.chitin} scale={[0.88, 0.78, 1.22]} castShadow receiveShadow>
           <sphereGeometry args={[0.5, 28, 22]} />
@@ -296,11 +296,20 @@ export function FlyMesh() {
           <mesh material={mats.chitin} scale={[0.78, 0.7, 0.62]} castShadow>
             <sphereGeometry args={[0.4, 22, 18]} />
           </mesh>
-          <mesh position={[-0.3, 0.06, 0.08]} rotation={[0.08, 0.62, 0.22]} material={mats.eye} scale={[0.78, 1.02, 1.12]} castShadow>
-            <sphereGeometry args={[0.36, 24, 20]} />
+          <mesh position={[-0.34, 0.08, 0.1]} rotation={[0.08, 0.7, 0.22]} material={mats.eye} scale={[0.92, 1.16, 1.22]} castShadow>
+            <sphereGeometry args={[0.38, 32, 24]} />
           </mesh>
-          <mesh position={[0.3, 0.06, 0.08]} rotation={[0.08, -0.62, -0.22]} material={mats.eye} scale={[0.78, 1.02, 1.12]} castShadow>
-            <sphereGeometry args={[0.36, 24, 20]} />
+          <mesh position={[0.34, 0.08, 0.1]} rotation={[0.08, -0.7, -0.22]} material={mats.eye} scale={[0.92, 1.16, 1.22]} castShadow>
+            <sphereGeometry args={[0.38, 32, 24]} />
+          </mesh>
+          <mesh position={[-0.08, 0.32, 0.12]} material={mats.dark}>
+            <sphereGeometry args={[0.035, 8, 8]} />
+          </mesh>
+          <mesh position={[0.08, 0.32, 0.12]} material={mats.dark}>
+            <sphereGeometry args={[0.035, 8, 8]} />
+          </mesh>
+          <mesh position={[0, 0.34, 0.16]} material={mats.dark}>
+            <sphereGeometry args={[0.028, 8, 8]} />
           </mesh>
           <mesh position={[0, 0.22, 0.02]} material={mats.dark}>
             <sphereGeometry args={[0.04, 8, 8]} />
@@ -337,10 +346,10 @@ export function FlyMesh() {
         </group>
 
         <group ref={wingL} position={[-0.22, 0.32, 0.02]}>
-          <mesh geometry={wingGeo} material={mats.wing} />
+          <mesh geometry={wingGeo} material={mats.wing} castShadow />
         </group>
         <group ref={wingR} position={[0.22, 0.32, 0.02]}>
-          <mesh geometry={wingGeo} material={mats.wing} />
+          <mesh geometry={wingGeo} material={mats.wing} castShadow />
         </group>
         <mesh ref={blurL} position={[-0.55, 0.3, -0.15]} rotation={[0.1, 0.4, 0.7]} material={mats.blur}>
           <circleGeometry args={[0.85, 18]} />

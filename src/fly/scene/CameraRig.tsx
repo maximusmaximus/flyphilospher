@@ -228,6 +228,7 @@ function installInput(camera: THREE.Camera, el: HTMLCanvasElement) {
 
   const inShell = (target: EventTarget | null) => {
     if (!(target instanceof Node)) return false;
+    if (target instanceof Element && target.closest("[data-fly-ui]")) return false;
     return shell.contains(target) || el.contains(target);
   };
 
@@ -235,6 +236,7 @@ function installInput(camera: THREE.Camera, el: HTMLCanvasElement) {
     if (!inShell(e.target)) return;
     if (e.button !== 0 && e.pointerType === "mouse") return;
     markUser();
+    sim.pointer.drag = 0;
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try {
       shell.setPointerCapture(e.pointerId);
@@ -273,7 +275,10 @@ function installInput(camera: THREE.Camera, el: HTMLCanvasElement) {
     markUser();
     const cam = window.__flyCamInstall?.camera ?? camera;
     if (ptrs.size === 1) {
-      applyOrbit(nx - drag.x, ny - drag.y);
+      const dx = nx - drag.x;
+      const dy = ny - drag.y;
+      sim.pointer.drag += Math.hypot(dx, dy);
+      applyOrbit(dx, dy);
       drag.x = nx;
       drag.y = ny;
     } else if (ptrs.size >= 2) {

@@ -9,14 +9,19 @@ import { World } from "./scene/World";
 import { Loop } from "./scene/Loop";
 import { BrainView } from "./scene/BrainView";
 import { CameraRig } from "./scene/CameraRig";
+import { Drops } from "./scene/Drops";
+import { Chrome } from "./ui/Chrome";
+import { detectQuality } from "./quality";
 
 export function FlyApp() {
   const [live, setLive] = useState(false);
   const [client, setClient] = useState(false);
+  const [dpr, setDpr] = useState<[number, number]>([1, 1.5]);
   const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setClient(true);
+    setDpr(detectQuality().dpr);
     let gone = false;
     sim.brain = null;
     void loadConnectome().then((data) => {
@@ -51,10 +56,10 @@ export function FlyApp() {
     >
       <Canvas
         shadows
-        dpr={[1, 1.75]}
+        dpr={dpr}
         gl={{
-          antialias: true,
-          powerPreference: "high-performance",
+          antialias: !detectQuality().mobile,
+          powerPreference: detectQuality().mobile ? "low-power" : "high-performance",
           alpha: false,
           preserveDrawingBuffer: true,
           toneMapping: THREE.ACESFilmicToneMapping,
@@ -65,7 +70,7 @@ export function FlyApp() {
         onCreated={({ gl, scene, camera }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.shadowMap.enabled = true;
-          gl.shadowMap.type = THREE.PCFShadowMap;
+          gl.shadowMap.type = detectQuality().mobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
           gl.domElement.style.touchAction = "none";
           scene.background = new THREE.Color("#2a262e");
           camera.lookAt(0, PEDESTAL_H + 0.05, 0);
@@ -76,10 +81,12 @@ export function FlyApp() {
             <World />
             <FlyMesh />
             <Loop />
+            <Drops />
             <CameraRig />
           </>
         ) : null}
       </Canvas>
+      {client ? <Chrome /> : null}
       {client ? <BrainView /> : null}
       {!live ? (
         <div className="pointer-events-none absolute inset-0 grid place-items-center">

@@ -9,5 +9,8 @@ artifacts
 tmp
 *.log
 .DS_Store
+.venice-key
+data/
+
 dist
 .cache

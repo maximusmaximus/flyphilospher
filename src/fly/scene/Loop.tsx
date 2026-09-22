@@ -14,8 +14,8 @@ const DESIRED = new THREE.Vector3();
 const PREV_CAM = new THREE.Vector3(0.72, 1.32, 0.62);
 
 function bounceMirror(x: number, y: number, z: number, vx: number, vz: number) {
-  const halfW = MIRROR_W * 0.5 + 0.03;
-  const top = PEDESTAL_H + MIRROR_H + 0.04;
+  const halfW = sim.stage.mirrorW * 0.5 + 0.04;
+  const top = PEDESTAL_H + sim.stage.mirrorH + 0.04;
   if (Math.abs(x) > halfW || y > top || y < PEDESTAL_H - 0.02) {
     return { x, z, vx, vz, hit: 0 };
   }
@@ -45,6 +45,10 @@ export function Loop() {
   const saveAcc = useRef(0);
 
   useFrame((_, delta) => {
+    const now = Date.now();
+    const dropped = sim.drops.filter((item) => item.dropAt <= now).length;
+    sim.stage.mirrorW = Math.min(PEDESTAL_R * 1.7, MIRROR_W + dropped * 0.055);
+    sim.stage.mirrorH = Math.min(1.7, MIRROR_H + dropped * 0.07);
     const d = Math.min(delta, 0.08);
     const brain = sim.brain;
     if (!brain) return;
@@ -155,6 +159,7 @@ export function Loop() {
       f.vx += FLEE.x * (0.42 + prox * 0.35);
       f.vz += FLEE.z * (0.42 + prox * 0.35);
       brain.teach(-1, 0.05);
+      sim.say("It startles and leaves the stone.");
     }
     f.landLock = Math.max(0, f.landLock - d);
     if (f.airborne) f.airTime += d;
@@ -167,6 +172,7 @@ export function Loop() {
         f.y = PEDESTAL_H + 0.006;
         f.landLock = 1.1;
         brain.teach(0.85, 0.05);
+        sim.say("It settles on the stone again.");
       } else {
         f.vy -= 0.9 * d;
       }
@@ -275,6 +281,24 @@ export function Loop() {
     if (bouncedY.hit > 0) bounceMem.current = Math.min(1, bounceMem.current + bouncedY.hit);
 
     sim.cam.moving = camSpeed;
+
+    if (!f.airborne && facingMirror > 0.65 && nearGlass > 0.45 && loom < 0.35) {
+      sim.say("It studies the other fly in the glass.");
+    } else if (m.da < -0.25) {
+      sim.say("That felt sharp. It is keeping the lesson.");
+    } else if (m.valence > 0.25 && !f.airborne) {
+      sim.say("The room feels familiar. It stays.");
+    }
+    let nearest = 99;
+    let nearestName = "";
+    for (const body of sim.bodies) {
+      const distB = Math.hypot(f.x - body.x, f.z - body.z);
+      if (distB < nearest) {
+        nearest = distB;
+        nearestName = body.name;
+      }
+    }
+    if (nearest < 0.22 && nearestName) sim.say(`It comes up to ${nearestName}.`);
 
     buzz.setListener(CAM.x, CAM.y, CAM.z, FWD.x, FWD.y, FWD.z, 0, 1, 0);
     buzz.setSource(f.x, f.y, f.z, Math.max(m.wingPower, f.airborne ? 0.55 : 0), f.airborne);
