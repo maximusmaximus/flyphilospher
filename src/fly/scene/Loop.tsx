@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { buzz } from "../audio/buzz";
-import { flushMemory, memoryAim, novelty, poseQuery, remember, sectorId } from "../memory/bank";
+import { flushMemory, novelty, poseQuery, remember, sectorId } from "../memory/bank";
 import { viewOf } from "../memory/topology";
 import { FLIGHT_CEILING, MIRROR_CLEAR, MIRROR_H, MIRROR_W, PEDESTAL_H, PEDESTAL_R, TOUCH_DIST, sim } from "../sim";
 
@@ -10,7 +10,6 @@ const CAM = new THREE.Vector3();
 const FWD = new THREE.Vector3();
 const FLY = new THREE.Vector3();
 const TO_FLY = new THREE.Vector3();
-const TO_PERCH = new THREE.Vector3();
 const FLEE = new THREE.Vector3();
 const DESIRED = new THREE.Vector3();
 const PREV_CAM = new THREE.Vector3(0.72, 1.32, 0.62);
@@ -46,6 +45,7 @@ export function Loop() {
   const bounceMem = useRef(0);
   const saveAcc = useRef(0);
   const learnAcc = useRef(0);
+  const roam = useRef({ t: 1.2, yaw: 0.4, pause: 0 });
 
   useFrame((_, delta) => {
     const now = Date.now();
@@ -254,8 +254,7 @@ export function Loop() {
       if (f.y < PEDESTAL_H + 0.3) {
         f.airborne = false;
         f.vy = 0;
-        f.y = PEDESTAL_H + 0.006;
-        f.landLock = 1.1;
+        f.landLock = 0.6;
         f.hop = false;
         brain.teach(0.85, 0.05);
         sim.say("It settles on the stone again.");
@@ -268,64 +267,58 @@ export function Loop() {
     if (FLEE.lengthSq() < 1e-6) FLEE.set(Math.cos(f.yaw), 0, Math.sin(f.yaw));
     FLEE.normalize();
 
-    const perchZ = side * 0.1;
-    const perchX = THREE.MathUtils.clamp(f.x * 0.15, -MIRROR_W * 0.18, MIRROR_W * 0.18);
-    TO_PERCH.set(perchX - f.x, 0, perchZ - f.z);
-    if (TO_PERCH.lengthSq() > 1e-8) TO_PERCH.normalize();
-
     const learned = THREE.MathUtils.clamp(m.valence, -1, 1);
-    const attract =
-      (m.smallObject * 0.55 + m.mbon * 0.25 + m.tracker * 0.3 + Math.max(0, learned) * 0.7) *
-      (1 - Math.min(1, loom));
     const fleeAmt = THREE.MathUtils.clamp(
-      m.looming * 0.85 +
-        m.walkBack * 0.5 +
-        loom * 0.5 +
-        prox * 0.75 +
-        Math.max(0, -learned) * 0.65 -
-        attract * 0.25,
+      m.looming * 0.85 + m.walkBack * 0.45 + loom * 0.45 + prox * 0.7 + Math.max(0, -learned) * 0.4,
       0,
       1.45,
     );
+    if (!f.airborne && fleeAmt < 0.35) {
+      roam.current.t -= d;
+      if (roam.current.pause > 0) roam.current.pause = Math.max(0, roam.current.pause - d);
+      if (roam.current.t <= 0) {
+        if (Math.random() < 0.3) {
+          roam.current.pause = 0.7 + Math.random() * 1.6;
+          roam.current.t = roam.current.pause;
+        } else {
+          roam.current.yaw = wrapPi(f.yaw + (Math.random() - 0.5) * 1.8);
+          roam.current.t = 1.4 + Math.random() * 3.2;
+          roam.current.pause = 0;
+        }
+      }
+    }
     DESIRED.set(0, 0, 0);
-    DESIRED.addScaledVector(FLEE, fleeAmt + (f.airborne ? 0.28 : 0));
-    if (!f.airborne) DESIRED.addScaledVector(TO_PERCH, attract);
-    if (m.walkFwd > m.walkBack && !f.airborne) {
-      DESIRED.x += -Math.sin(f.yaw) * (m.walkFwd + Math.max(0, learned) * 0.35);
-      DESIRED.z += -Math.cos(f.yaw) * (m.walkFwd + Math.max(0, learned) * 0.35);
-    } else if (!f.airborne) {
-      DESIRED.addScaledVector(FLEE, m.walkBack);
+    if (fleeAmt > 0.2) DESIRED.addScaledVector(FLEE, fleeAmt);
+    if (!f.airborne && fleeAmt < 0.85) {
+      if (study && study.near > 0.2) {
+        DESIRED.x += (study.tx - f.x) * (0.8 + study.novel * 0.4);
+        DESIRED.z += (study.tz - f.z) * (0.8 + study.novel * 0.4);
+      } else if (roam.current.pause <= 0) {
+        DESIRED.x += -Math.sin(roam.current.yaw);
+        DESIRED.z += -Math.cos(roam.current.yaw);
+      }
+      const rad = Math.hypot(f.x, f.z);
+      const limit = PEDESTAL_R * 0.58;
+      if (rad > limit) {
+        const push = (rad - limit) / 0.1;
+        DESIRED.x += (-f.x / rad) * push;
+        DESIRED.z += (-f.z / rad) * push;
+      }
     }
     if (f.airborne) {
-      const ang = f.airTime * 1.35;
-      DESIRED.x += Math.cos(ang) * 0.28;
-      DESIRED.z += Math.sin(ang) * 0.28;
-      if (learned > 0.15) DESIRED.addScaledVector(TO_PERCH, learned * 0.35);
-    }
-    if (study && !f.airborne && loom < 0.55) {
-      const pull = 0.5 + m.smallObject * 0.85 + m.tracker * 0.45 + study.novel * 0.4;
-      DESIRED.x += (study.tx - f.x) * pull;
-      DESIRED.z += (study.tz - f.z) * pull;
-    }
-    const aim = memoryAim();
-    if (aim && !f.airborne && loom < 0.4 && (!study || study.near < 0.3)) {
-      const sign = aim.valence >= 0 ? 1 : -1;
-      const pull = 0.35 + Math.min(0.7, Math.abs(aim.valence));
-      DESIRED.x += (aim.x - f.x) * sign * pull;
-      DESIRED.z += (aim.z - f.z) * sign * pull;
+      DESIRED.x += -Math.sin(f.yaw) + FLEE.x * 0.35;
+      DESIRED.z += -Math.cos(f.yaw) + FLEE.z * 0.35;
     }
 
-    if (DESIRED.lengthSq() > 1e-6) DESIRED.normalize();
-    let targetYaw = Math.atan2(-DESIRED.x, -DESIRED.z);
-    if (!f.airborne && attract > fleeAmt && nearGlass > 0.4) {
-      targetYaw = side > 0 ? 0 : Math.PI;
-    }
-    const yawMix = 1 - Math.exp(-d * (f.airborne ? 3.4 : 4.8));
+    const heading = DESIRED.lengthSq() > 0.05;
+    let targetYaw = f.yaw;
+    if (heading) targetYaw = Math.atan2(-DESIRED.x, -DESIRED.z);
+    const yawMix = 1 - Math.exp(-d * (f.airborne ? 2.2 : 2.6));
     let dyaw = wrapPi(targetYaw - f.yaw);
     f.yaw += dyaw * yawMix;
 
-    const walkSpeed = (m.walking ? 0.065 : 0.016) + m.leg * 0.045 + fleeAmt * 0.05;
-    const flySpeed = 0.28 + m.flight * 0.3 + m.wingPower * 0.2 + prox * 0.18;
+    const walkSpeed = heading ? (m.walking ? 0.055 : 0.028) + m.leg * 0.03 + fleeAmt * 0.04 : 0.004;
+    const flySpeed = 0.22 + m.flight * 0.22 + m.wingPower * 0.12 + prox * 0.08;
     const speed = f.airborne ? flySpeed : walkSpeed;
     f.vx += (-Math.sin(f.yaw) * speed - f.vx) * (1 - Math.exp(-d * 5));
     f.vz += (-Math.cos(f.yaw) * speed - f.vz) * (1 - Math.exp(-d * 5));
@@ -346,11 +339,12 @@ export function Loop() {
     const maxR = f.airborne ? PEDESTAL_R * 1.85 : PEDESTAL_R * 0.78;
     if (radialNow > maxR) {
       const k = maxR / radialNow;
-      f.x *= k;
-      f.z *= k;
-      f.vx *= 0.4;
-      f.vz *= 0.4;
-      if (!f.airborne) brain.teach(-0.35, 0.02);
+      f.x += (f.x * k - f.x) * 0.18;
+      f.z += (f.z * k - f.z) * 0.18;
+      const inward = Math.atan2(f.x, f.z);
+      f.yaw += wrapPi(inward - f.yaw) * 0.08;
+      f.vx *= 0.8;
+      f.vz *= 0.8;
     }
 
     if (f.airborne) {

@@ -409,8 +409,7 @@ export function CameraRig() {
       rig.phi = THREE.MathUtils.clamp(rig.phi + rig.vPhi * d, PHI_MIN, PHI_MAX);
       rig.radius = THREE.MathUtils.clamp(rig.radius + rig.vRadius * d, MIN_R, MAX_R);
       if (track > 0.05 && rig.takeoff <= 0) {
-        const back = (1 - Math.exp(-d * 1.1)) * track;
-        rig.phi += (1.02 - rig.phi) * back * 0.45;
+        const back = (1 - Math.exp(-d * 0.35)) * track;
         rig.offX += (0 - rig.offX) * back;
         rig.offY += (0 - rig.offY) * back;
         rig.offZ += (0 - rig.offZ) * back;
@@ -418,22 +417,19 @@ export function CameraRig() {
     }
 
     if (rig.takeoff > 0) {
-      const k = 1 - Math.exp(-d * 1.6);
-      rig.radius += (WIDE_R - rig.radius) * k;
-      rig.fov += (WIDE_FOV - rig.fov) * k;
-      rig.offX += (0 - rig.offX) * k;
-      rig.offY += (0 - rig.offY) * k;
-      rig.offZ += (0 - rig.offZ) * k;
+      const k = 1 - Math.exp(-d * 0.55);
+      const wide = 1.35;
+      if (rig.radius < wide) rig.radius += (wide - rig.radius) * k;
+      rig.fov += (WIDE_FOV - rig.fov) * k * 0.4;
     }
 
-    const follow = rig.takeoff > 0 ? 0 : track;
-    const lx = rig.takeoff > 0 ? 0 : SCENE_X * (1 - follow) + f.x * follow;
-    const ly = rig.takeoff > 0 ? PEDESTAL_H * 0.62 : SCENE_Y * (1 - follow) + (f.y + 0.04) * follow;
-    const lz = rig.takeoff > 0 ? 0 : SCENE_Z * (1 - follow) + f.z * follow;
-    const lookK = 1 - Math.exp(-d * (rig.takeoff > 0 ? 2.2 : 6.5));
-    rig.lookX += (lx + rig.offX - rig.lookX) * lookK;
-    rig.lookY += (ly + rig.offY - rig.lookY) * lookK;
-    rig.lookZ += (lz + rig.offZ - rig.lookZ) * lookK;
+    const panK = navigating ? 0 : 1 - Math.exp(-d * 0.28);
+    const lookY = THREE.MathUtils.lerp(SCENE_Y, f.y + 0.02, f.airborne ? 0.3 : 0.65);
+    if (panK > 0) {
+      rig.lookX += (f.x - rig.lookX) * panK;
+      rig.lookY += (lookY - rig.lookY) * panK;
+      rig.lookZ += (f.z - rig.lookZ) * panK;
+    }
     const desiredFov = fovFor(rig.shot, rig.takeoff);
     if (rig.takeoff <= 0) {
       rig.fov += (desiredFov - rig.fov) * (1 - Math.exp(-d * 4.5));
@@ -443,7 +439,7 @@ export function CameraRig() {
 
     SPH.set(rig.radius, rig.phi, rig.theta);
     POS.setFromSpherical(SPH);
-    LOOK.set(rig.lookX, rig.lookY, rig.lookZ);
+    LOOK.set(rig.lookX + rig.offX, rig.lookY + rig.offY, rig.lookZ + rig.offZ);
     OFFSET.copy(LOOK).add(POS);
     cam.position.copy(OFFSET);
     cam.lookAt(LOOK);

@@ -14,12 +14,12 @@ const M4 = new THREE.Matrix4();
 const Y_UP = new THREE.Vector3(0, 1, 0);
 
 const LEGS: Array<{ side: number; x: number; z: number; gait: number; fold: number }> = [
-  { side: -1, x: 0.28, z: 0.38, gait: 0, fold: 0.15 },
-  { side: 1, x: 0.28, z: 0.38, gait: Math.PI, fold: 0.15 },
-  { side: -1, x: 0.34, z: 0.02, gait: Math.PI, fold: 0.05 },
-  { side: 1, x: 0.34, z: 0.02, gait: 0, fold: 0.05 },
-  { side: -1, x: 0.26, z: -0.36, gait: 0, fold: -0.12 },
-  { side: 1, x: 0.26, z: -0.36, gait: Math.PI, fold: -0.12 },
+  { side: -1, x: 0.2, z: 0.2, gait: 0, fold: 0.62 },
+  { side: 1, x: 0.2, z: 0.2, gait: Math.PI, fold: 0.62 },
+  { side: -1, x: 0.24, z: 0, gait: Math.PI, fold: 0.05 },
+  { side: 1, x: 0.24, z: 0, gait: 0, fold: 0.05 },
+  { side: -1, x: 0.18, z: -0.2, gait: 0, fold: -0.58 },
+  { side: 1, x: 0.18, z: -0.2, gait: Math.PI, fold: -0.58 },
 ];
 
 function Leg({
@@ -48,36 +48,38 @@ function Leg({
     const ph = f.walkPhase + gait;
     const swing = Math.sin(ph);
     const lift = Math.max(0, swing) * drive * (1 - air);
-    const stride = Math.cos(ph) * 0.55 * drive * (1 - air);
+    const stride = Math.cos(ph) * 0.32 * drive * (1 - air);
     if (root.current) {
-      root.current.rotation.z = side * (0.42 + air * 0.35 - lift * 0.08);
-      root.current.rotation.x = fold + stride * 0.65 + air * 0.85;
+      root.current.rotation.z = side * (1.05 - lift * 0.28 + air * 0.35);
+      root.current.rotation.x = fold + stride + air * 0.35;
     }
     if (femur.current) {
-      femur.current.rotation.x = -0.15 - lift * 0.7 + air * 0.45;
+      femur.current.rotation.z = side * 0.62;
+      femur.current.rotation.x = stride * 0.2;
     }
     if (tibia.current) {
-      tibia.current.rotation.x = 1.15 - lift * 0.35 + air * 0.55;
+      tibia.current.rotation.z = side * (-1.25 + lift * 0.4 - air * 0.15);
+      tibia.current.rotation.x = -stride * 0.15;
     }
   });
   return (
-    <group ref={root} position={[side * x, -0.02, z]}>
-      <mesh position={[0, -0.07, 0]} material={mats.dark} castShadow>
-        <capsuleGeometry args={[0.03, 0.08, 3, 5]} />
+    <group ref={root} position={[side * x, -0.05, z]}>
+      <mesh position={[0, -0.045, 0]} material={mats.dark} castShadow>
+        <capsuleGeometry args={[0.02, 0.05, 3, 5]} />
       </mesh>
-      <group ref={femur} position={[side * 0.05, -0.12, 0]}>
-        <mesh position={[0, -0.16, 0]} material={mats.chitin} castShadow>
-          <capsuleGeometry args={[0.022, 0.26, 3, 6]} />
+      <group ref={femur} position={[0, -0.09, 0]}>
+        <mesh position={[0, -0.13, 0]} material={mats.chitin} castShadow>
+          <capsuleGeometry args={[0.016, 0.2, 3, 6]} />
         </mesh>
-        <group ref={tibia} position={[0, -0.32, 0]}>
-          <mesh position={[0, -0.18, 0]} material={mats.dark} castShadow>
-            <capsuleGeometry args={[0.016, 0.28, 3, 5]} />
+        <group ref={tibia} position={[0, -0.26, 0]}>
+          <mesh position={[0, -0.15, 0]} material={mats.dark} castShadow>
+            <capsuleGeometry args={[0.012, 0.24, 3, 5]} />
           </mesh>
-          <mesh position={[0, -0.36, 0.02]} material={mats.dark} castShadow>
-            <capsuleGeometry args={[0.01, 0.16, 2, 4]} />
+          <mesh position={[0, -0.32, 0.01]} material={mats.dark} castShadow>
+            <capsuleGeometry args={[0.007, 0.16, 2, 4]} />
           </mesh>
-          <mesh position={[0, -0.46, 0.04]} material={mats.dark}>
-            <sphereGeometry args={[0.016, 6, 6]} />
+          <mesh position={[0, -0.42, 0.02]} material={mats.dark}>
+            <sphereGeometry args={[0.011, 6, 6]} />
           </mesh>
         </group>
       </group>
@@ -305,11 +307,11 @@ export function FlyMesh() {
           <mesh material={mats.chitin} scale={[0.78, 0.7, 0.62]} castShadow>
             <sphereGeometry args={[0.4, 22, 18]} />
           </mesh>
-          <mesh position={[-0.34, 0.08, 0.1]} rotation={[0.08, 0.7, 0.22]} material={mats.eye} scale={[0.92, 1.16, 1.22]} castShadow>
-            <sphereGeometry args={[0.38, 32, 24]} />
+          <mesh position={[-0.2, 0.03, 0.14]} rotation={[0.04, 0.5, 0.06]} material={mats.eye} scale={[0.78, 0.92, 0.7]} castShadow>
+            <sphereGeometry args={[0.24, 28, 20]} />
           </mesh>
-          <mesh position={[0.34, 0.08, 0.1]} rotation={[0.08, -0.7, -0.22]} material={mats.eye} scale={[0.92, 1.16, 1.22]} castShadow>
-            <sphereGeometry args={[0.38, 32, 24]} />
+          <mesh position={[0.2, 0.03, 0.14]} rotation={[0.04, -0.5, -0.06]} material={mats.eye} scale={[0.78, 0.92, 0.7]} castShadow>
+            <sphereGeometry args={[0.24, 28, 20]} />
           </mesh>
           <mesh position={[-0.08, 0.32, 0.12]} material={mats.dark}>
             <sphereGeometry args={[0.035, 8, 8]} />
