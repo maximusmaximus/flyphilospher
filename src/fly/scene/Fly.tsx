@@ -263,7 +263,7 @@ export function FlyMesh() {
     if (haltL.current) haltL.current.rotation.x = Math.sin(f.wingPhase * 1.35) * (flying ? 0.95 : 0.08);
     if (haltR.current) haltR.current.rotation.x = Math.sin(f.wingPhase * 1.35 + 0.5) * (flying ? 0.95 : 0.08);
     if (head.current) {
-      f.headYaw += ((m.tracker - m.walkBack) * 0.55 - f.headYaw) * (1 - Math.exp(-d * 6));
+      f.headYaw += ((m.tracker * 0.45 + m.valence * 0.4 - m.walkBack * 0.35 + m.neck * 0.2) - f.headYaw) * (1 - Math.exp(-d * 6));
       head.current.rotation.y = f.headYaw * 0.5;
       head.current.rotation.x = flying ? -0.16 : 0.1;
     }

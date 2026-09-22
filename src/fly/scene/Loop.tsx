@@ -17,22 +17,32 @@ function bounceMirror(x: number, y: number, z: number, vx: number, vz: number) {
   const halfW = MIRROR_W * 0.5 + 0.03;
   const top = PEDESTAL_H + MIRROR_H + 0.04;
   if (Math.abs(x) > halfW || y > top || y < PEDESTAL_H - 0.02) {
-    return { x, z, vx, vz };
+    return { x, z, vx, vz, hit: 0 };
   }
   const clear = MIRROR_CLEAR;
   if (Math.abs(z) < clear) {
     const side = z >= 0 ? 1 : -1;
     z = side * clear;
-    if (vz * side < 0) vz = -vz * 0.28;
+    const hitting = vz * side < 0;
+    if (hitting) vz = -vz * 0.28;
     vx *= 0.65;
+    return { x, z, vx, vz, hit: hitting ? 1 : 0.35 };
   }
-  return { x, z, vx, vz };
+  return { x, z, vx, vz, hit: 0 };
+}
+
+function wrapPi(a: number) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
 }
 
 export function Loop() {
   const { camera } = useThree();
   const acc = useRef(0);
   const born = useRef(performance.now());
+  const bounceMem = useRef(0);
+  const saveAcc = useRef(0);
 
   useFrame((_, delta) => {
     const d = Math.min(delta, 0.08);
@@ -61,21 +71,60 @@ export function Loop() {
 
     const side = f.z >= 0 ? 1 : -1;
     const glassDist = Math.abs(f.z);
+    const worldAz = Math.atan2(CAM.x - f.x, CAM.z - f.z);
+    const camAz = wrapPi(worldAz - f.yaw);
+    const camEl = Math.atan2(CAM.y - f.y, Math.max(0.04, Math.hypot(CAM.x - f.x, CAM.z - f.z)));
     const facingMirror = Math.max(0, side * Math.cos(f.yaw));
     const nearGlass = THREE.MathUtils.clamp(1 - glassDist / 0.22, 0, 1);
     const onFace = Math.abs(f.x) < MIRROR_W * 0.55 ? 1 : 0.35;
     const mirrorFly = THREE.MathUtils.clamp(0.12 + nearGlass * 0.85 * onFace + facingMirror * 0.4, 0, 1.25);
+    const radial = Math.hypot(f.x, f.z);
+    const maxStand = PEDESTAL_R * 0.78;
+    const edge = THREE.MathUtils.clamp((radial - maxStand * 0.55) / (maxStand * 0.45), 0, 1);
+    const height = THREE.MathUtils.clamp((f.y - PEDESTAL_H) / FLIGHT_CEILING, 0, 1);
+    const leftLight = THREE.MathUtils.clamp(0.35 + 0.55 * Math.max(0, Math.sin(camAz)) + 0.2 * (CAM.x < f.x ? 1 : 0), 0, 1.2);
+    const rightLight = THREE.MathUtils.clamp(0.35 + 0.55 * Math.max(0, -Math.sin(camAz)) + 0.2 * (CAM.x > f.x ? 1 : 0), 0, 1.2);
 
-    sim.sense.loom = loom;
-    sim.sense.flowX = flowX;
-    sim.sense.flowY = flowY;
-    sim.sense.luminance = THREE.MathUtils.clamp(0.38 + CAM.y * 0.12, 0.15, 0.85);
-    sim.sense.mirrorFly = mirrorFly;
-    sim.sense.wind = THREE.MathUtils.clamp(camSpeed * 0.18 + loom * 0.2, 0, 1);
-    sim.sense.tarsal = f.airborne ? 0 : 1;
-    sim.sense.openSpace = 0.72;
+    bounceMem.current *= Math.exp(-d * 4.5);
+    const s = sim.sense;
+    s.loom = loom;
+    s.flowX = flowX;
+    s.flowY = flowY;
+    s.luminance = THREE.MathUtils.clamp(0.38 + CAM.y * 0.12 + 0.08 * (1 - edge), 0.12, 0.9);
+    s.mirrorFly = mirrorFly;
+    s.wind = THREE.MathUtils.clamp(camSpeed * 0.18 + loom * 0.2 + (sim.cam.user ? 0.15 : 0), 0, 1);
+    s.tarsal = f.airborne ? 0 : 1;
+    s.openSpace = THREE.MathUtils.clamp(0.35 + height * 0.5 + (1 - nearGlass) * 0.3, 0, 1);
+    s.camAz = camAz;
+    s.camEl = THREE.MathUtils.clamp(camEl, -1.2, 1.2);
+    s.camDist = THREE.MathUtils.clamp(1 - dist / 0.85, 0, 1);
+    s.glass = nearGlass;
+    s.edge = edge;
+    s.height = height;
+    s.facingMirror = facingMirror;
+    s.bounce = bounceMem.current;
+    s.user = sim.cam.user ? 1 : THREE.MathUtils.clamp(camSpeed * 0.4, 0, 1);
+    s.leftLight = leftLight;
+    s.rightLight = rightLight;
+    s.air = f.airborne ? 1 : 0;
 
-    brain.sense(sim.sense);
+    const punish =
+      loom * 0.7 +
+      prox * 0.55 +
+      bounceMem.current * 0.9 +
+      nearGlass * bounceMem.current * 0.5 +
+      edge * (f.airborne ? 0.05 : 0.25) +
+      (dist < TOUCH_DIST ? 0.85 : 0);
+    const calm = dist > 0.5 && loom < 0.28 && sim.cam.radius > 0.3;
+    const reward =
+      s.tarsal * (calm ? 0.55 : 0.12) +
+      mirrorFly * facingMirror * (1 - Math.min(1, loom)) * 0.45 +
+      s.openSpace * s.tarsal * 0.18 +
+      (1 - edge) * s.tarsal * 0.12;
+    const valence = THREE.MathUtils.clamp(reward - punish, -1.25, 1.15);
+
+    brain.sense(s);
+    brain.teach(valence, d);
     acc.current += d;
     const step = 1 / 120;
     let guard = 0;
@@ -85,6 +134,12 @@ export function Loop() {
     }
     sim.motor = brain.readout();
     const m = sim.motor;
+
+    saveAcc.current += d;
+    if (saveAcc.current > 4) {
+      saveAcc.current = 0;
+      brain.maybeSave();
+    }
 
     const touching = dist < TOUCH_DIST || (sim.cam.radius < 0.15 && dist < 0.24);
     const ready = performance.now() - born.current > 800;
@@ -99,17 +154,19 @@ export function Loop() {
       FLEE.normalize();
       f.vx += FLEE.x * (0.42 + prox * 0.35);
       f.vz += FLEE.z * (0.42 + prox * 0.35);
+      brain.teach(-1, 0.05);
     }
     f.landLock = Math.max(0, f.landLock - d);
     if (f.airborne) f.airTime += d;
 
-    const calm = dist > 0.5 && loom < 0.28 && m.giantFiber < 0.14 && sim.cam.radius > 0.3 && !touching;
-    if (f.airborne && f.airTime > 1.7 && f.landLock <= 0 && calm) {
+    const landCalm = dist > 0.5 && loom < 0.28 && m.giantFiber < 0.14 && sim.cam.radius > 0.3 && !touching;
+    if (f.airborne && f.airTime > 1.7 && f.landLock <= 0 && landCalm) {
       if (f.y < PEDESTAL_H + 0.3) {
         f.airborne = false;
         f.vy = 0;
         f.y = PEDESTAL_H + 0.006;
         f.landLock = 1.1;
+        brain.teach(0.85, 0.05);
       } else {
         f.vy -= 0.9 * d;
       }
@@ -124,18 +181,26 @@ export function Loop() {
     TO_PERCH.set(perchX - f.x, 0, perchZ - f.z);
     if (TO_PERCH.lengthSq() > 1e-8) TO_PERCH.normalize();
 
-    const attract = (m.smallObject * 0.7 + m.mbon * 0.45 + m.tracker * 0.35) * (1 - Math.min(1, loom));
+    const learned = THREE.MathUtils.clamp(m.valence, -1, 1);
+    const attract =
+      (m.smallObject * 0.55 + m.mbon * 0.25 + m.tracker * 0.3 + Math.max(0, learned) * 0.7) *
+      (1 - Math.min(1, loom));
     const fleeAmt = THREE.MathUtils.clamp(
-      m.looming * 0.95 + m.walkBack * 0.55 + loom * 0.55 + prox * 0.8 - attract * 0.25,
+      m.looming * 0.85 +
+        m.walkBack * 0.5 +
+        loom * 0.5 +
+        prox * 0.75 +
+        Math.max(0, -learned) * 0.65 -
+        attract * 0.25,
       0,
-      1.4,
+      1.45,
     );
     DESIRED.set(0, 0, 0);
-    DESIRED.addScaledVector(FLEE, fleeAmt + (f.airborne ? 0.35 : 0));
+    DESIRED.addScaledVector(FLEE, fleeAmt + (f.airborne ? 0.28 : 0));
     if (!f.airborne) DESIRED.addScaledVector(TO_PERCH, attract);
     if (m.walkFwd > m.walkBack && !f.airborne) {
-      DESIRED.x += -Math.sin(f.yaw) * m.walkFwd;
-      DESIRED.z += -Math.cos(f.yaw) * m.walkFwd;
+      DESIRED.x += -Math.sin(f.yaw) * (m.walkFwd + Math.max(0, learned) * 0.35);
+      DESIRED.z += -Math.cos(f.yaw) * (m.walkFwd + Math.max(0, learned) * 0.35);
     } else if (!f.airborne) {
       DESIRED.addScaledVector(FLEE, m.walkBack);
     }
@@ -143,6 +208,7 @@ export function Loop() {
       const ang = f.airTime * 1.35;
       DESIRED.x += Math.cos(ang) * 0.28;
       DESIRED.z += Math.sin(ang) * 0.28;
+      if (learned > 0.15) DESIRED.addScaledVector(TO_PERCH, learned * 0.35);
     }
 
     if (DESIRED.lengthSq() > 1e-6) DESIRED.normalize();
@@ -151,9 +217,7 @@ export function Loop() {
       targetYaw = side > 0 ? 0 : Math.PI;
     }
     const yawMix = 1 - Math.exp(-d * (f.airborne ? 3.4 : 4.8));
-    let dyaw = targetYaw - f.yaw;
-    while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-    while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+    let dyaw = wrapPi(targetYaw - f.yaw);
     f.yaw += dyaw * yawMix;
 
     const walkSpeed = (m.walking ? 0.065 : 0.016) + m.leg * 0.045 + fleeAmt * 0.05;
@@ -169,15 +233,20 @@ export function Loop() {
     f.z = bounced.z;
     f.vx = bounced.vx;
     f.vz = bounced.vz;
+    if (bounced.hit > 0) {
+      bounceMem.current = Math.min(1, bounceMem.current + bounced.hit);
+      brain.teach(-0.7 * bounced.hit, 0.02);
+    }
 
-    const radial = Math.hypot(f.x, f.z);
+    const radialNow = Math.hypot(f.x, f.z);
     const maxR = f.airborne ? PEDESTAL_R * 1.85 : PEDESTAL_R * 0.78;
-    if (radial > maxR) {
-      const k = maxR / radial;
+    if (radialNow > maxR) {
+      const k = maxR / radialNow;
       f.x *= k;
       f.z *= k;
       f.vx *= 0.4;
       f.vz *= 0.4;
+      if (!f.airborne) brain.teach(-0.35, 0.02);
     }
 
     if (f.airborne) {
@@ -203,6 +272,7 @@ export function Loop() {
     f.z = bouncedY.z;
     f.vx = bouncedY.vx;
     f.vz = bouncedY.vz;
+    if (bouncedY.hit > 0) bounceMem.current = Math.min(1, bounceMem.current + bouncedY.hit);
 
     sim.cam.moving = camSpeed;
 
@@ -220,6 +290,11 @@ export function Loop() {
         glass: Math.abs(f.z),
         touching: dist < TOUCH_DIST,
         ready: performance.now() - born.current > 800,
+        valence: m.valence,
+        da: m.da,
+        kenyon: m.kenyon,
+        updates: brain.updates,
+        snap: brain.snapshot(),
       }),
     };
   });
@@ -240,6 +315,17 @@ declare global {
         glass: number;
         touching: boolean;
         ready: boolean;
+        valence: number;
+        da: number;
+        kenyon: number;
+        updates: number;
+        snap: {
+          da: number;
+          sign: number;
+          valence: number;
+          updates: number;
+          kc: Array<{ r: number; e: number; v: number }>;
+        };
       };
     };
   }

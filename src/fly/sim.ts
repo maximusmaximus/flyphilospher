@@ -27,6 +27,9 @@ const motorZero = (): MotorReadout => ({
   wind: 0,
   flying: false,
   walking: false,
+  valence: 0,
+  da: 0,
+  kenyon: 0,
 });
 
 export const sim = {
@@ -41,6 +44,18 @@ export const sim = {
     wind: 0,
     tarsal: 1,
     openSpace: 0.7,
+    camAz: 0,
+    camEl: 0,
+    camDist: 0,
+    glass: 0,
+    edge: 0,
+    height: 0,
+    facingMirror: 0,
+    bounce: 0,
+    user: 0,
+    leftLight: 0.5,
+    rightLight: 0.5,
+    air: 0,
   } as SenseInput,
   fly: {
     x: 0.12,

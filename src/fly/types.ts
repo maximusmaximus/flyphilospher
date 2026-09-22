@@ -77,6 +77,9 @@ export type MotorReadout = {
   wind: number;
   flying: boolean;
   walking: boolean;
+  valence: number;
+  da: number;
+  kenyon: number;
 };
 
 export type SenseInput = {
@@ -88,4 +91,16 @@ export type SenseInput = {
   wind: number;
   tarsal: number;
   openSpace: number;
+  camAz: number;
+  camEl: number;
+  camDist: number;
+  glass: number;
+  edge: number;
+  height: number;
+  facingMirror: number;
+  bounce: number;
+  user: number;
+  leftLight: number;
+  rightLight: number;
+  air: number;
 };

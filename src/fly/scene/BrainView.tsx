@@ -6,12 +6,15 @@ import { ROLE } from "../types";
 
 const BASE = new THREE.Color();
 const FIRE = new THREE.Color("#f2f4f0");
+const DA_FIRE = new THREE.Color("#ffe7a8");
 
 function roleColor(role: number, out: THREE.Color) {
+  if (role === ROLE.dopamine) return out.set("#e2b15a");
+  if (role === ROLE.kenyon) return out.set("#d8cfc4");
+  if (role === ROLE.mbon) return out.set("#c9b29a");
   if (role <= ROLE.tracker) return out.set("#6b8a8a");
   if (role <= ROLE.walk_back) return out.set("#e8ddd0");
   if (role <= ROLE.leg) return out.set("#8a6a58");
-  if (role <= ROLE.dopamine) return out.set("#c4b8b0");
   return out.set("#5a555c");
 }
 
@@ -46,7 +49,8 @@ function Cloud({ n }: { n: number }) {
     for (let i = 0; i < brain.n; i++) {
       roleColor(brain.roles[i]!, BASE);
       const a = Math.min(1, brain.rate[i]! * 4 + brain.spikes[i]!);
-      BASE.lerp(FIRE, a);
+      BASE.lerp(brain.roles[i] === ROLE.dopamine ? DA_FIRE : FIRE, a);
+      if (brain.roles[i] === ROLE.dopamine) BASE.lerp(DA_FIRE, Math.min(1, brain.da * 0.85));
       attr.setXYZ(i, BASE.r, BASE.g, BASE.b);
     }
     attr.needsUpdate = true;

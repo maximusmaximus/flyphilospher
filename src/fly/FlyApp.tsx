@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
-import { FlyBrain, loadConnectome } from "./brain/engine";
+import { BRAIN_REV, FlyBrain, loadConnectome } from "./brain/engine";
 import { buzz } from "./audio/buzz";
 import { PEDESTAL_H, sim } from "./sim";
 import { FlyMesh } from "./scene/Fly";
@@ -18,6 +18,7 @@ export function FlyApp() {
   useEffect(() => {
     setClient(true);
     let gone = false;
+    sim.brain = null;
     void loadConnectome().then((data) => {
       if (gone) return;
       sim.brain = new FlyBrain(data);
@@ -25,13 +26,14 @@ export function FlyApp() {
     });
     const vis = () => {
       if (document.visibilityState === "visible") buzz.resume();
+      else sim.brain?.maybeSave();
     };
     document.addEventListener("visibilitychange", vis);
     return () => {
       gone = true;
       document.removeEventListener("visibilitychange", vis);
     };
-  }, []);
+  }, [BRAIN_REV]);
 
   const unlock = () => {
     buzz.unlock();
