@@ -14,37 +14,48 @@ const S = new THREE.Vector3();
 const M4 = new THREE.Matrix4();
 const Y_UP = new THREE.Vector3(0, 1, 0);
 
-const LEGS: Array<{ side: number; hip: THREE.Vector3; foot: THREE.Vector3; tripod: number }> = [
-  { side: -1, hip: new THREE.Vector3(-0.18, 0.36, 0.28), foot: new THREE.Vector3(-0.34, 0.02, 0.55), tripod: 0 },
-  { side: 1, hip: new THREE.Vector3(0.18, 0.36, 0.28), foot: new THREE.Vector3(0.34, 0.02, 0.55), tripod: Math.PI },
-  { side: -1, hip: new THREE.Vector3(-0.22, 0.34, 0.0), foot: new THREE.Vector3(-0.44, 0.02, 0.02), tripod: Math.PI },
-  { side: 1, hip: new THREE.Vector3(0.22, 0.34, 0.0), foot: new THREE.Vector3(0.44, 0.02, 0.02), tripod: 0 },
-  { side: -1, hip: new THREE.Vector3(-0.18, 0.34, -0.26), foot: new THREE.Vector3(-0.36, 0.02, -0.5), tripod: 0 },
-  { side: 1, hip: new THREE.Vector3(0.18, 0.34, -0.26), foot: new THREE.Vector3(0.36, 0.02, -0.5), tripod: Math.PI },
+const LEGS: Array<{ side: number; zHip: number; zFoot: number; lateral: number; tripod: number }> = [
+  { side: -1, zHip: 0.22, zFoot: 0.38, lateral: 0.4, tripod: 0 },
+  { side: 1, zHip: 0.22, zFoot: 0.38, lateral: 0.4, tripod: Math.PI },
+  { side: -1, zHip: 0, zFoot: 0, lateral: 0.5, tripod: Math.PI },
+  { side: 1, zHip: 0, zFoot: 0, lateral: 0.5, tripod: 0 },
+  { side: -1, zHip: -0.2, zFoot: -0.5, lateral: 0.4, tripod: 0 },
+  { side: 1, zHip: -0.2, zFoot: -0.5, lateral: 0.4, tripod: Math.PI },
 ];
 
-const COXA = 0.07;
-const FEMUR = 0.2;
-const LOWER = 0.22;
-const TARSUS = 0.1;
-const SWING = 0.42;
+const SWING = 0.38;
 
-type Plant = { x: number; z: number; swing: boolean; ready: boolean };
-
-function ikKnee(a: THREE.Vector3, foot: THREE.Vector3, fem: number, lower: number, side: number, knee: THREE.Vector3) {
-  const delta = TMP.copy(foot).sub(a);
-  const dist = THREE.MathUtils.clamp(delta.length(), Math.abs(fem - lower) + 0.001, fem + lower - 0.001);
-  delta.multiplyScalar(1 / dist);
-  const cosA = THREE.MathUtils.clamp((fem * fem + dist * dist - lower * lower) / (2 * fem * dist), -1, 1);
-  const ang = Math.acos(cosA);
-  const out = P.set(side, 0.4, 0).normalize();
-  const bend = S.crossVectors(delta, out);
-  if (bend.lengthSq() < 1e-8) bend.set(side, 0, 0);
-  bend.normalize();
-  knee.copy(a).addScaledVector(delta, Math.cos(ang) * fem).addScaledVector(bend, Math.sin(ang) * fem);
-  if (Math.sign(knee.x || side) !== side) {
-    knee.copy(a).addScaledVector(delta, Math.cos(ang) * fem).addScaledVector(bend.negate(), Math.sin(ang) * fem);
+function layLeg(
+  side: number,
+  zHip: number,
+  zFoot: number,
+  lateral: number,
+  stride: number,
+  lift: number,
+  tuck: boolean,
+  half: number,
+  hip: THREE.Vector3,
+  coxa: THREE.Vector3,
+  knee: THREE.Vector3,
+  ankle: THREE.Vector3,
+  foot: THREE.Vector3,
+) {
+  hip.set(side * 0.14, 0.32, zHip);
+  if (tuck) {
+    const trail = zFoot > 0.15 ? 0.12 : zFoot < -0.2 ? -0.24 : -0.05;
+    knee.set(side * 0.22, 0.28, zHip + trail * 0.45);
+    coxa.copy(hip).lerp(knee, 0.42);
+    ankle.set(side * 0.16, 0.16, zHip + trail);
+    foot.set(side * 0.12, 0.11, zHip + trail * 1.25);
+    return;
   }
+  const z = zFoot + stride * half;
+  foot.set(side * (lateral - lift * 0.04), 0.02 + lift * 0.11, z);
+  knee.set(side * lateral * 0.9, Math.min(0.33, 0.22 + lift * 0.08), zHip * 0.4 + z * 0.6);
+  coxa.copy(hip).lerp(knee, 0.36);
+  coxa.y = Math.min(coxa.y, hip.y - 0.02);
+  const along = zFoot < -0.2 ? 0.08 : -0.08;
+  ankle.set(foot.x - side * 0.012, 0.045 + lift * 0.03, foot.z + along);
 }
 
 function placeBone(mesh: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) {
@@ -76,7 +87,6 @@ export function FlyMesh() {
   const head = useRef<THREE.Group>(null);
   const abdomen = useRef<THREE.Group>(null);
   const bones = useRef<Array<Array<THREE.Mesh | null>>>(LEGS.map(() => [null, null, null, null]));
-  const plants = useRef<Plant[]>(LEGS.map(() => ({ x: 0, z: 0, swing: false, ready: false })));
 
   const maps = useMemo(
     () => ({
@@ -272,60 +282,27 @@ export function FlyMesh() {
       group.current.rotateX(f.pitch + (stepping ? Math.sin(f.walkPhase) * 0.03 : 0));
       group.current.rotateZ(f.roll + (stepping ? Math.sin(f.walkPhase) * 0.05 : 0));
       group.current.updateMatrixWorld(true);
-      const body = group.current;
+      const rate = Math.min(14, 6.5 + groundSpeed * 160);
+      const half = stepping ? THREE.MathUtils.clamp((groundSpeed * ((Math.PI * 2) / rate) * (1 - SWING)) / 0.11, 0.1, 0.26) : 0;
       for (let i = 0; i < LEGS.length; i++) {
         const leg = LEGS[i]!;
         const chain = bones.current[i];
-        const plant = plants.current[i];
-        if (!chain || !plant || !chain[0] || !chain[1] || !chain[2] || !chain[3]) continue;
+        if (!chain || !chain[0] || !chain[1] || !chain[2] || !chain[3]) continue;
         const phase = (f.walkPhase + leg.tripod) % (Math.PI * 2);
-        const swinging = stepping && phase / (Math.PI * 2) < SWING;
-        const swingU = swinging ? phase / (Math.PI * 2) / SWING : 0;
-        if (flying) {
-          FOOT.copy(leg.hip).add(GOAL.set(leg.side * 0.1, -0.04, leg.foot.z > 0 ? 0.08 : -0.1));
-          plant.ready = false;
-          plant.swing = false;
-        } else if (!stepping) {
-          FOOT.copy(leg.foot);
-          body.localToWorld(GOAL.copy(leg.foot));
-          plant.x = GOAL.x;
-          plant.z = GOAL.z;
-          plant.ready = true;
-          plant.swing = false;
-        } else if (swinging) {
-          body.localToWorld(GOAL.copy(leg.foot));
-          if (!plant.ready) {
-            plant.x = GOAL.x;
-            plant.z = GOAL.z;
-            plant.ready = true;
-          }
-          const lift = Math.sin(Math.min(1, swingU) * Math.PI);
-          const blend = swingU * swingU * (3 - 2 * swingU);
-          FOOT.set(plant.x + (GOAL.x - plant.x) * blend, f.y + 0.006 + lift * 0.028, plant.z + (GOAL.z - plant.z) * blend);
-          body.worldToLocal(FOOT);
-        } else {
-          body.localToWorld(GOAL.copy(leg.foot));
-          if (plant.swing || !plant.ready) {
-            plant.x = GOAL.x;
-            plant.z = GOAL.z;
-            plant.ready = true;
-          }
-          FOOT.set(plant.x, f.y + 0.004, plant.z);
-          body.worldToLocal(FOOT);
+        const u = phase / (Math.PI * 2);
+        const swinging = stepping && u < SWING;
+        let stride = 0;
+        let lift = 0;
+        if (swinging) {
+          const s = u / SWING;
+          stride = -1 + 2 * s;
+          lift = Math.sin(s * Math.PI);
+        } else if (stepping) {
+          const s = (u - SWING) / (1 - SWING);
+          stride = 1 - 2 * s;
         }
-        plant.swing = swinging;
-        COX.copy(leg.hip);
-        P.copy(leg.foot).sub(leg.hip);
-        P.y = -0.05;
-        if (P.lengthSq() < 1e-6) P.set(leg.side, -1, 0);
-        P.setLength(COXA);
-        COX.add(P);
-        ikKnee(COX, FOOT, FEMUR, LOWER, leg.side, KNEE);
-        ANK.copy(FOOT).sub(KNEE);
-        if (ANK.lengthSq() < 1e-8) ANK.set(0, -1, 0);
-        ANK.setLength(TARSUS);
-        ANK.copy(FOOT).sub(ANK);
-        placeBone(chain[0], leg.hip, COX);
+        layLeg(leg.side, leg.zHip, leg.zFoot, leg.lateral, stride, lift, flying, half, GOAL, COX, KNEE, ANK, FOOT);
+        placeBone(chain[0], GOAL, COX);
         placeBone(chain[1], COX, KNEE);
         placeBone(chain[2], KNEE, ANK);
         placeBone(chain[3], ANK, FOOT);
@@ -422,7 +399,7 @@ export function FlyMesh() {
         </group>
 
         {LEGS.map((leg, i) => (
-          <group key={`${leg.side}-${leg.hip.z}`}>
+          <group key={`${leg.side}-${leg.zHip}`}>
             <mesh
               ref={(node) => {
                 bones.current[i]![0] = node;
@@ -439,7 +416,7 @@ export function FlyMesh() {
               material={mats.chitin}
               castShadow
             >
-              <capsuleGeometry args={[0.011, 0.178, 6, 10]} />
+              <capsuleGeometry args={[0.014, 0.16, 6, 10]} />
             </mesh>
             <mesh
               ref={(node) => {
@@ -448,7 +425,7 @@ export function FlyMesh() {
               material={mats.dark}
               castShadow
             >
-              <capsuleGeometry args={[0.007, 0.106, 5, 8]} />
+              <capsuleGeometry args={[0.008, 0.16, 5, 8]} />
             </mesh>
             <mesh
               ref={(node) => {
