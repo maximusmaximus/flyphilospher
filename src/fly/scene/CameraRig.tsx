@@ -6,10 +6,11 @@ import { PEDESTAL_H, sim } from "../sim";
 const MACRO_FOV = 34;
 const PORTRAIT_FOV = 38;
 const WIDE_FOV = 46;
-const MACRO_R = 0.092;
-const PORTRAIT_R = 0.34;
+const VIEW_FLOOR = PEDESTAL_H * 0.15;
+const MIN_R = 0.22;
+const MACRO_R = MIN_R;
+const PORTRAIT_R = 0.72;
 const WIDE_R = 1.92;
-const MIN_R = 0.04;
 const MAX_R = 3.35;
 const PHI_MIN = 0.42;
 const PHI_MAX = 1.22;
@@ -70,7 +71,7 @@ function fovFor(shot: Shot, takeoff: number) {
 }
 
 function classifyRadius(r: number) {
-  if (r < 0.17) rig.shot = "macro";
+  if (r < 0.4) rig.shot = "macro";
   else if (r > 1.15) rig.shot = "wide";
   else rig.shot = "portrait";
   if (!rig.airborne && rig.shot !== "wide") rig.groundShot = rig.shot;
@@ -128,12 +129,12 @@ function snapMacro() {
 }
 
 function magnet() {
-  if (rig.radius < 0.2) {
+  if (rig.radius < 0.48) {
     rig.shot = "macro";
     if (!rig.airborne) rig.groundShot = "macro";
   } else if (rig.radius > 1.25) {
     rig.shot = "wide";
-  } else if (rig.shot === "macro" && rig.radius > 0.22) {
+  } else if (rig.shot === "macro" && rig.radius > 0.5) {
     rig.shot = "portrait";
     if (!rig.airborne) rig.groundShot = "portrait";
   }
@@ -439,12 +440,13 @@ export function CameraRig() {
 
     SPH.set(rig.radius, rig.phi, rig.theta);
     POS.setFromSpherical(SPH);
-    LOOK.set(rig.lookX + rig.offX, rig.lookY + rig.offY, rig.lookZ + rig.offZ);
+    LOOK.set(rig.lookX + rig.offX, Math.max(VIEW_FLOOR, rig.lookY + rig.offY), rig.lookZ + rig.offZ);
     OFFSET.copy(LOOK).add(POS);
+    if (OFFSET.y < VIEW_FLOOR) OFFSET.y = VIEW_FLOOR;
     cam.position.copy(OFFSET);
     cam.lookAt(LOOK);
     cam.fov = rig.fov;
-    cam.near = rig.radius < 0.16 ? 0.0035 : 0.02;
+    cam.near = 0.02;
     cam.far = 28;
     cam.updateProjectionMatrix();
 

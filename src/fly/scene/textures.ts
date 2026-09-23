@@ -1,18 +1,21 @@
 import * as THREE from "three";
+import { quality } from "../quality";
 
 function canvas(size: number) {
+  const px = Math.max(64, Math.round(size * quality.tex));
   const c = document.createElement("canvas");
-  c.width = c.height = size;
+  c.width = c.height = px;
   const g = c.getContext("2d");
   if (!g) throw new Error("2d");
+  g.setTransform(px / size, 0, 0, px / size, 0, 0);
   return { c, g };
 }
 
-function tex(c: HTMLCanvasElement, repeat = 1, aniso = 8) {
+function tex(c: HTMLCanvasElement, repeat = 1) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = aniso;
+  t.anisotropy = quality.spectral ? 16 : 8;
   t.repeat.set(repeat, repeat);
   t.needsUpdate = true;
   return t;
@@ -46,7 +49,7 @@ export function makeEyeAlbedo() {
       g.fill();
     }
   }
-  return tex(c, 2.4, 8);
+  return tex(c, 2.4);
 }
 
 export function makeAbdomen() {
@@ -62,7 +65,7 @@ export function makeAbdomen() {
   }
   g.fillStyle = "rgba(20,12,8,0.55)";
   g.fillRect(108, 0, 28, 256);
-  return tex(c, 1, 4);
+  return tex(c, 1);
 }
 
 export function makeThorax() {
@@ -77,7 +80,7 @@ export function makeThorax() {
     g.fillStyle = `rgba(20,16,12,${0.15 + Math.random() * 0.35})`;
     g.fillRect(Math.random() * 256, Math.random() * 256, 1, 3);
   }
-  return tex(c, 1, 4);
+  return tex(c, 1);
 }
 
 export function makeStone() {
@@ -103,7 +106,7 @@ export function makeStone() {
     );
     g.stroke();
   }
-  return tex(c, 2, 8);
+  return tex(c, 2);
 }
 
 export function makeWingAlpha() {
@@ -142,7 +145,7 @@ export function makeWingAlpha() {
   g.fill();
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
+  t.anisotropy = quality.spectral ? 16 : 8;
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   t.needsUpdate = true;
   return t;

@@ -107,14 +107,19 @@ export function World() {
   const stone = useMemo(() => makeStone(), []);
   const stoneMat = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         map: stone,
         color: "#d5c8ba",
-        roughness: 0.78,
-        metalness: 0.04,
+        roughness: 0.72,
+        metalness: 0.06,
+        clearcoat: quality.spectral ? 0.18 : 0,
+        clearcoatRoughness: 0.55,
+        sheen: quality.spectral ? 0.25 : 0,
+        sheenColor: new THREE.Color("#f0e4d4"),
       }),
     [stone],
   );
+  const sides = quality.mobile ? 40 : Math.min(160, 32 * quality.seg);
 
   return (
     <>
@@ -131,16 +136,26 @@ export function World() {
         shadow-bias={-0.00035}
         shadow-normalBias={0.02}
         shadow-camera-near={0.4}
-        shadow-camera-far={16}
-        shadow-camera-left={-2.2}
-        shadow-camera-right={2.2}
-        shadow-camera-top={2.4}
-        shadow-camera-bottom={-2.2}
+        shadow-camera-far={18}
+        shadow-camera-left={-3.2}
+        shadow-camera-right={3.2}
+        shadow-camera-top={3.6}
+        shadow-camera-bottom={-3.2}
       />
-      <directionalLight position={[-2.2, 1.6, -2]} intensity={0.55} color="#8aa8a8" />
-      <pointLight position={[0.1, 1.7, 0.5]} intensity={0.55} color="#f0e6d8" distance={4} />
+      <directionalLight position={[-2.4, 2.4, -1.6]} intensity={0.7} color="#9ec4c4" />
+      <spotLight
+        position={[0.15, 4.4, 0.4]}
+        angle={0.62}
+        penumbra={0.85}
+        intensity={quality.spectral ? 6 : 2.2}
+        color="#fff6ea"
+        distance={9}
+        castShadow={quality.spectral}
+      />
+      <pointLight position={[0.1, 1.7, 0.5]} intensity={0.8} color="#f0e6d8" distance={5} />
+      <pointLight position={[-0.8, 2.2, -0.4]} intensity={quality.spectral ? 1.4 : 0.4} color="#8eb8ff" distance={6} />
 
-      <Environment resolution={quality.reflector}>
+      <Environment resolution={quality.mobile ? 128 : 512}>
         <mesh scale={20}>
           <sphereGeometry args={[1, 24, 16]} />
           <meshBasicMaterial color="#b7c2be" side={THREE.BackSide} />
@@ -154,13 +169,13 @@ export function World() {
 
       <group>
         <mesh position={[0, PEDESTAL_H * 0.28, 0]} material={stoneMat} castShadow receiveShadow>
-          <cylinderGeometry args={[PEDESTAL_R * 1.08, PEDESTAL_R * 1.18, PEDESTAL_H * 0.56, 48]} />
+          <cylinderGeometry args={[PEDESTAL_R * 1.08, PEDESTAL_R * 1.18, PEDESTAL_H * 0.56, sides]} />
         </mesh>
         <mesh position={[0, PEDESTAL_H * 0.72, 0]} material={stoneMat} castShadow receiveShadow>
-          <cylinderGeometry args={[PEDESTAL_R * 0.92, PEDESTAL_R, PEDESTAL_H * 0.32, 48]} />
+          <cylinderGeometry args={[PEDESTAL_R * 0.92, PEDESTAL_R, PEDESTAL_H * 0.32, sides]} />
         </mesh>
         <mesh position={[0, PEDESTAL_H, 0]} rotation={[-Math.PI / 2, 0, 0]} material={stoneMat} receiveShadow>
-          <circleGeometry args={[PEDESTAL_R * 0.92, 48]} />
+          <circleGeometry args={[PEDESTAL_R * 0.92, sides]} />
         </mesh>
         <mesh position={[0, PEDESTAL_H + 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[PEDESTAL_R * 0.86, PEDESTAL_R * 0.92, 48]} />
@@ -171,12 +186,13 @@ export function World() {
       <Mirror />
 
       <ContactShadows
-        position={[0, PEDESTAL_H + 0.001, 0]}
-        opacity={0.38}
-        scale={1.5}
-        blur={1.6}
-        far={0.7}
-        color="#1a1512"
+        position={[0, PEDESTAL_H + 0.002, 0]}
+        opacity={0.55}
+        scale={2.4}
+        blur={2.2}
+        far={1.2}
+        resolution={quality.mobile ? 256 : 1024}
+        color="#140e0c"
       />
       <Dust />
     </>

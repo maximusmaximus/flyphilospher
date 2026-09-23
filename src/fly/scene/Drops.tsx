@@ -19,6 +19,12 @@ type Body = {
   vx: number;
   vy: number;
   vz: number;
+  rx: number;
+  ry: number;
+  rz: number;
+  wx: number;
+  wy: number;
+  wz: number;
   rest: boolean;
   saved: boolean;
   calm: number;
@@ -50,17 +56,24 @@ function ensure(item: DropItem, now: number) {
     y: PEDESTAL_H + radius,
     z: Math.sin(ang) * rad * (h % 2 === 0 ? 1 : -1),
   };
+  const tilt = ((h % 1000) / 1000) * Math.PI;
   const fresh = !item.rest && now - item.dropAt < 12_000;
   const body: Body = {
     id: item.id,
     name: item.prompt,
     r: radius,
-    x: fresh ? (h % 2 === 0 ? 0.12 : -0.14) : landed.x,
-    y: fresh ? PEDESTAL_H + 2.2 + (h % 5) * 0.08 : landed.y,
-    z: fresh ? (h % 3) * 0.05 + 0.16 : landed.z,
-    vx: fresh ? ((h % 7) - 3) * 0.02 : 0,
-    vy: 0,
-    vz: fresh ? ((h % 5) - 2) * 0.02 : 0,
+    x: fresh ? Math.cos(ang) * 0.12 : landed.x,
+    y: fresh ? PEDESTAL_H + 3.4 + (h % 7) * 0.12 : landed.y,
+    z: fresh ? Math.sin(ang) * 0.16 : landed.z,
+    vx: fresh ? Math.cos(ang) * 0.18 : 0,
+    vy: fresh ? 0.05 : 0,
+    vz: fresh ? Math.sin(ang) * 0.18 : 0,
+    rx: fresh ? tilt : tilt * 0.45,
+    ry: ((h >> 3) % 628) / 100,
+    rz: fresh ? ((h >> 5) % 500) / 80 : ((h >> 5) % 200) / 120,
+    wx: fresh ? (((h >> 2) % 9) - 4) * 1.4 : 0,
+    wy: fresh ? (((h >> 4) % 9) - 4) * 1.1 : 0,
+    wz: fresh ? (((h >> 6) % 9) - 4) * 1.6 : 0,
     rest: !fresh,
     saved: !!item.rest || !fresh,
     calm: 0,
@@ -115,8 +128,7 @@ function Piece({ item }: { item: DropItem }) {
     const body = bodies.get(item.id);
     if (!wrap.current || !body) return;
     wrap.current.position.set(body.x, body.y, body.z);
-    wrap.current.rotation.x = body.vx * 0.4;
-    wrap.current.rotation.z = -body.vz * 0.4;
+    wrap.current.rotation.set(body.rx, body.ry, body.rz);
     const on = sim.selected === item.id;
     if (frame.current) frame.current.visible = on;
   });
@@ -147,7 +159,7 @@ export function Drops() {
       const now = Date.now();
       const next = sim.drops.filter((item) => item.dropAt <= now + 80);
       setShown((prev) => {
-        if (prev.length === next.length && prev.every((item, i) => item.id === next[i]?.id && item.image === next[i]?.image)) {
+        if (prev.length === next.length && prev.every((item, i) => item.id === next[i]?.id && item.image === next[i]?.image && item.stage === next[i]?.stage && (item.mesh?.parts.length ?? 0) === (next[i]?.mesh?.parts.length ?? 0))) {
           return prev;
         }
         return next;
@@ -165,19 +177,34 @@ export function Drops() {
 
     for (const b of list) {
       if (b.rest && b.vy === 0 && Math.hypot(b.vx, b.vz) < 0.01) continue;
-      b.vy -= 3.4 * d;
+      b.vy -= 4.2 * d;
       b.x += b.vx * d;
       b.y += b.vy * d;
       b.z += b.vz * d;
-      b.vx *= 1 - Math.min(1, d * 0.6);
-      b.vz *= 1 - Math.min(1, d * 0.6);
+      b.rx += b.wx * d;
+      b.ry += b.wy * d;
+      b.rz += b.wz * d;
+      b.vx *= 1 - Math.min(1, d * 0.35);
+      b.vz *= 1 - Math.min(1, d * 0.35);
 
-      const floor = PEDESTAL_H + b.r * 0.55;
+      const floor = PEDESTAL_H + b.r * 0.28;
       if (b.y < floor) {
         b.y = floor;
-        if (b.vy < 0) b.vy = Math.abs(b.vy) > 0.35 ? -b.vy * 0.42 : 0;
-        b.vx *= 0.86;
-        b.vz *= 0.86;
+        if (b.vy < -0.4) {
+          b.vy = -b.vy * 0.34;
+          b.wx += b.vz * 3.2;
+          b.wz -= b.vx * 3.2;
+          b.wx *= 0.72;
+          b.wy *= 0.72;
+          b.wz *= 0.72;
+        } else {
+          b.vy = 0;
+          b.wx *= 0.8;
+          b.wy *= 0.8;
+          b.wz *= 0.8;
+        }
+        b.vx *= 0.82;
+        b.vz *= 0.82;
       }
 
       const radial = Math.hypot(b.x, b.z);
@@ -253,13 +280,17 @@ export function Drops() {
 
     for (const b of list) {
       const speed = Math.hypot(b.vx, b.vy, b.vz);
-      if (b.y <= PEDESTAL_H + b.r * 0.6 + 0.02 && speed < 0.05) {
+      const spin = Math.hypot(b.wx, b.wy, b.wz);
+      if (b.y <= PEDESTAL_H + b.r * 0.45 && speed < 0.08 && spin < 0.6) {
         b.calm += d;
-        if (b.calm > 0.8) {
+        if (b.calm > 0.7) {
           b.rest = true;
           b.vx = 0;
           b.vy = 0;
           b.vz = 0;
+          b.wx = 0;
+          b.wy = 0;
+          b.wz = 0;
           if (!b.saved) {
             b.saved = true;
             sim.say(`${b.name} meets the stone.`);

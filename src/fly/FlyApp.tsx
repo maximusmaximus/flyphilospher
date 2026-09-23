@@ -16,12 +16,11 @@ import { detectQuality } from "./quality";
 export function FlyApp() {
   const [live, setLive] = useState(false);
   const [client, setClient] = useState(false);
-  const [dpr, setDpr] = useState<[number, number]>([1, 1.5]);
   const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setClient(true);
-    setDpr(detectQuality().dpr);
+    detectQuality();
     let gone = false;
     sim.brain = null;
     void loadConnectome().then((data) => {
@@ -56,14 +55,14 @@ export function FlyApp() {
     >
       <Canvas
         shadows
-        dpr={dpr}
+        dpr={client ? detectQuality().dpr : [1, 1]}
         gl={{
-          antialias: !detectQuality().mobile,
+          antialias: !detectQuality().spectral,
           powerPreference: detectQuality().mobile ? "low-power" : "high-performance",
           alpha: false,
           preserveDrawingBuffer: true,
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.55,
+          toneMappingExposure: detectQuality().spectral ? 1.15 : 1.45,
         }}
         camera={{ position: [0.72, 1.32, 0.62], fov: 40, near: 0.004, far: 28 }}
         style={{ position: "absolute", inset: 0, touchAction: "none", outline: "none" }}

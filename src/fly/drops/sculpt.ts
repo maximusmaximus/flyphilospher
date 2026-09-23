@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { quality } from "../quality";
 import type { MeshPart, MeshSpec } from "./types";
 import { sanitizeMesh } from "./mesh";
 
@@ -75,7 +76,7 @@ function cutout(img: CanvasImageSource) {
   ctx.putImageData(image, 0, 0);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = quality.spectral ? 16 : 8;
   return { n, bg, dist, tex, minX, minY, maxX, maxY, count };
 }
 
@@ -151,18 +152,23 @@ function shellMesh(img: CanvasImageSource, target: number, spec: MeshSpec) {
 }
 
 function partMesh(part: MeshPart, target: number, spec: MeshSpec) {
+  const seg = quality.seg;
   let geo: THREE.BufferGeometry;
-  if (part.kind === "capsule") geo = new THREE.CapsuleGeometry(0.5, 0.6, 6, 12);
-  else if (part.kind === "box") geo = new THREE.BoxGeometry(1, 1, 1, 3, 3, 3);
-  else if (part.kind === "cone") geo = new THREE.ConeGeometry(0.5, 1, 20);
-  else geo = new THREE.SphereGeometry(0.5, 28, 20);
+  if (part.kind === "capsule") geo = new THREE.CapsuleGeometry(0.5, 0.6, 4 + seg * 4, 8 + seg * 8);
+  else if (part.kind === "box") geo = new THREE.BoxGeometry(1, 1, 1, seg * 2, seg * 2, seg * 2);
+  else if (part.kind === "cone") geo = new THREE.ConeGeometry(0.5, 1, 12 + seg * 12);
+  else geo = new THREE.SphereGeometry(0.5, 16 + seg * 12, 12 + seg * 8);
   const mat = new THREE.MeshPhysicalMaterial({
     color: part.color,
     roughness: spec.roughness,
     metalness: spec.metalness,
-    clearcoat: spec.metalness > 0.4 ? 0.45 : 0.12,
-    sheen: 0.35,
+    clearcoat: spec.metalness > 0.4 ? 0.55 : 0.22,
+    clearcoatRoughness: 0.28,
+    sheen: 0.45,
     sheenColor: new THREE.Color(part.color),
+    iridescence: quality.spectral ? 0.35 : 0,
+    iridescenceIOR: 1.35,
+    iridescenceThicknessRange: [90, 420],
   });
   const mesh = new THREE.Mesh(geo, mat);
   const k = target * 0.72;
@@ -188,7 +194,7 @@ export function emojiMedallion(glyph: string, target: number) {
   ctx.fillText(glyph, 128, 138);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = quality.spectral ? 16 : 8;
   const mat = new THREE.MeshPhysicalMaterial({
     map: tex,
     color: "#ffffff",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { quality } from "../quality";
 import { sim } from "../sim";
 import { makeAbdomen, makeEyeAlbedo, makeThorax, makeWingAlpha, makeWingGeometry } from "./textures";
 
@@ -126,7 +127,7 @@ export function FlyMesh() {
       clearcoatRoughness: 0.08,
       emissive: new THREE.Color("#3a0806"),
       emissiveIntensity: 0.18,
-      iridescence: 0.35,
+      iridescence: quality.spectral ? 0.85 : 0.35,
       iridescenceIOR: 1.3,
       iridescenceThicknessRange: [100, 280],
     });
@@ -140,7 +141,7 @@ export function FlyMesh() {
       transmission: 0.38,
       thickness: 0.012,
       ior: 1.36,
-      iridescence: 1,
+      iridescence: quality.spectral ? 1 : 1,
       iridescenceIOR: 1.22,
       iridescenceThicknessRange: [60, 280],
       side: THREE.DoubleSide,
