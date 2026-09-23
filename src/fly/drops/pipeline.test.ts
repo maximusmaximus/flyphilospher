@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { topologyFromParts } from "../memory/topology.ts";
 import { sanitizeMesh } from "./mesh.ts";
+import { acceptablePrompt, describePrompt, tokenMesh } from "./prompt.ts";
 
 const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -33,7 +34,7 @@ test("a cat prompt becomes a 3d solid, then a painted drop, even if the paint fa
   process.env.FLY_SPEND_PATH = path.join(dir, "spend.json");
   const seen: string[] = [];
   let failImage = false;
-  const { designDrop, generateDrop, readPublicCatalog, setVeniceTransport } = await import("./persist.server.ts");
+  const { designDrop, generateDrop, placeDrop, readPublicCatalog, setVeniceTransport } = await import("./persist.server.ts");
   setVeniceTransport(async (pathName, body) => {
     seen.push(pathName);
     const payload = body as { reasoning?: { enabled?: boolean }; venice_parameters?: { disable_thinking?: boolean } };
@@ -45,6 +46,21 @@ test("a cat prompt becomes a 3d solid, then a painted drop, even if the paint fa
     if (failImage) return new Response("image down", { status: 503 });
     return Response.json({ images: [PNG] });
   });
+
+  assert.equal(acceptablePrompt("🐱"), true);
+  assert.equal(acceptablePrompt("☺"), true);
+  assert.equal(acceptablePrompt("a"), false);
+  assert.match(describePrompt("🐱"), /🐱/);
+
+  const token = await placeDrop("🐱", "memoji01", tokenMesh("🐱"));
+  assert.equal(token.item.prompt, "🐱");
+  assert.equal(token.item.stage, "token");
+  assert.ok(token.item.dropAt <= Date.now());
+  const upgraded = await designDrop("🐱", token.item.id);
+  assert.equal(upgraded.item.id, "memoji01");
+  assert.equal(upgraded.item.prompt, "🐱");
+  assert.equal(upgraded.item.stage, "solid");
+  assert.ok((upgraded.item.mesh?.parts.length ?? 0) >= 8);
 
   const designed = await designDrop("a small cat");
   assert.ok(designed.item.mesh);

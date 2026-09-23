@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { settleDrop } from "../drops/fns";
-import { sculptFromImage } from "../drops/sculpt";
+import { sculptFromImage, emojiMedallion } from "../drops/sculpt";
+import { emojiGlyph } from "../drops/prompt";
 import type { DropItem } from "../drops/types";
 import { clearFly } from "./clear";
 import { topologyFromImage, topologyFromParts } from "../memory/topology";
@@ -86,7 +87,18 @@ function Piece({ item }: { item: DropItem }) {
       mesh.clear();
       mesh.add(sculpt);
     };
-    if (item.mesh && item.mesh.parts.length >= 3) apply(null);
+    const glyph = item.stage === "token" ? emojiGlyph(item.prompt) : "";
+    if (glyph) {
+      const medal = emojiMedallion(glyph, FLY_SIZE * item.scale);
+      if (medal) {
+        mesh.clear();
+        mesh.add(medal);
+      }
+      return () => {
+        gone = true;
+      };
+    }
+    if (item.mesh && item.mesh.parts.length) apply(null);
     if (!item.image) return () => {
       gone = true;
     };
@@ -97,7 +109,7 @@ function Piece({ item }: { item: DropItem }) {
     return () => {
       gone = true;
     };
-  }, [item.image, item.mesh, item.scale, item.id, mesh]);
+  }, [item.image, item.mesh, item.scale, item.id, item.stage, item.prompt, mesh]);
 
   useFrame(() => {
     const body = bodies.get(item.id);

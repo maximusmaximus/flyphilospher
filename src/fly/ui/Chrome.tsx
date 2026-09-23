@@ -1,9 +1,32 @@
 import { useEffect, useState } from "react";
-import { designDrop, listDrops, submitDrop } from "../drops/fns";
+import { designDrop, listDrops, placeDrop, submitDrop } from "../drops/fns";
+import { acceptablePrompt, tokenMesh } from "../drops/prompt";
 import { formatCountdown, nextDropAt } from "../drops/schedule";
 import type { DropItem } from "../drops/types";
 import { detectQuality } from "../quality";
 import { sim } from "../sim";
+
+function mergeDrops(local: DropItem[], remote: DropItem[]) {
+  const map = new Map<string, DropItem>();
+  for (const item of remote) map.set(item.id, item);
+  for (const item of local) {
+    const other = map.get(item.id);
+    if (!other) {
+      if (Date.now() - item.createdAt < 10 * 60_000) map.set(item.id, item);
+      continue;
+    }
+    const localParts = item.mesh?.parts.length ?? 0;
+    const remoteParts = other.mesh?.parts.length ?? 0;
+    map.set(item.id, {
+      ...other,
+      mesh: remoteParts >= localParts ? other.mesh : item.mesh,
+      image: other.image || item.image,
+      stage: other.stage === "painted" || other.stage === "solid" ? other.stage : item.stage ?? other.stage,
+      dropAt: Math.min(other.dropAt, item.dropAt),
+    });
+  }
+  return [...map.values()];
+}
 
 const STEPS = [
   "Drag to look around. Pinch or scroll to come closer. The view stays on the room.",
@@ -40,8 +63,8 @@ export function Chrome() {
       try {
         const catalog = await listDrops();
         if (gone) return;
-        sim.drops = catalog.items;
-        setItems(catalog.items);
+        sim.drops = mergeDrops(sim.drops, catalog.items);
+        setItems(sim.drops);
       } catch {
         /* catalog will retry */
       }
@@ -56,10 +79,15 @@ export function Chrome() {
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      setNow(Date.now());
-      setNotes([...sim.notes]);
-      setSelected(sim.selected);
-    }, 400);
+      const nextNow = Date.now();
+      setNow((prev) => (Math.floor(prev / 1000) === Math.floor(nextNow / 1000) ? prev : nextNow));
+      setNotes((prev) => {
+        const next = sim.notes;
+        if (prev.length === next.length && prev.every((note, i) => note === next[i])) return prev;
+        return [...next];
+      });
+      setSelected((prev) => (prev === sim.selected ? prev : sim.selected));
+    }, 500);
     return () => window.clearInterval(id);
   }, []);
 
@@ -73,38 +101,59 @@ export function Chrome() {
 
   const send = async () => {
     const text = prompt.trim();
-    if (text.length < 2 || busy) return;
+    if (!acceptablePrompt(text) || busy) return;
+    const now = Date.now();
+    const optimistic: DropItem = {
+      id: `m${now.toString(36)}`,
+      cid: `m${now.toString(36)}`,
+      prompt: text,
+      enhanced: text,
+      createdAt: now,
+      dropAt: now - 200,
+      scale: 1.4,
+      image: "",
+      github: null,
+      ipfs: null,
+      pinned: false,
+      rest: null,
+      mesh: tokenMesh(text),
+      stage: "token",
+    };
+    sim.drops = mergeDrops(sim.drops, [optimistic]);
+    setItems(sim.drops);
+    setPrompt("");
     setBusy(true);
     setError("");
-    setPhase("Rewriting the idea");
-    setPhaseWhen(null);
+    setPhase("Falling now");
+    setPhaseWhen(optimistic.dropAt);
+    sim.say(`${text} is falling.`);
     try {
       const quality = detectQuality().mobile ? "low" : "high";
-      const designed = await designDrop({ data: { prompt: text } });
-      sim.drops = [...sim.drops.filter((item) => item.id !== designed.item.id), designed.item];
+      const placed = await placeDrop({ data: { prompt: text, id: optimistic.id, mesh: optimistic.mesh } });
+      sim.drops = mergeDrops(sim.drops.filter((item) => item.id !== optimistic.id), [placed.item]);
       setItems(sim.drops);
-      setPhase(`Shaping ${designed.mesh.parts.length} parts`);
-      setPhaseWhen(designed.dropAt);
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      setPhase("Painting the surface");
+      setPhase("Shaping the solid");
       try {
-        const result = await submitDrop({
-          data: { prompt: text, quality, enhanced: designed.enhanced, mesh: designed.mesh, id: designed.item.id },
-        });
-        const soon = result.item.dropAt <= Date.now() + 2000;
-        setPhase(result.painted === false ? "Solid is falling" : soon ? "Falling now" : "Waiting to fall");
-        setPhaseWhen(result.item.dropAt);
-        sim.drops = [...sim.drops.filter((item) => item.id !== result.item.id && item.id !== designed.item.id), result.item];
+        const designed = await designDrop({ data: { prompt: text, id: placed.item.id } });
+        sim.drops = mergeDrops(sim.drops, [{ ...designed.item, stage: "solid" }]);
         setItems(sim.drops);
-        setPrompt("");
-        sim.say(soon ? `${result.item.prompt} is falling.` : `${result.item.prompt} is waiting in the sky.`);
+        setPhase("Painting the surface");
+        const result = await submitDrop({
+          data: {
+            prompt: text,
+            quality,
+            enhanced: designed.enhanced,
+            mesh: designed.mesh,
+            id: designed.item.id,
+          },
+        });
+        sim.drops = mergeDrops(sim.drops, [{ ...result.item, stage: result.painted === false ? "solid" : "painted" }]);
+        setItems(sim.drops);
+        setPhase(result.painted === false ? "Solid is falling" : "Falling now");
         if (result.painted === false) setError("the paint failed, the solid is still falling");
       } catch (err) {
         setPhase("Solid is falling");
-        setPhaseWhen(designed.item.dropAt);
-        setPrompt("");
-        sim.say(`${designed.item.prompt} is falling.`);
-        setError(err instanceof Error ? err.message : "the paint failed, the solid is still falling");
+        setError(err instanceof Error ? err.message : "the maker is still catching up");
       }
       window.setTimeout(() => {
         setPhase("");
@@ -112,8 +161,7 @@ export function Chrome() {
       }, 4000);
     } catch (err) {
       setPhase("");
-      setPhaseWhen(null);
-      setError(err instanceof Error ? err.message : "it could not be made");
+      setError(err instanceof Error ? err.message : "it could not be saved");
     } finally {
       setBusy(false);
     }
@@ -152,6 +200,7 @@ export function Chrome() {
           }}
         >
           <form
+            method="dialog"
             className="flex min-w-0 flex-1 gap-2"
             onSubmit={(e) => {
               e.preventDefault();
@@ -159,6 +208,7 @@ export function Chrome() {
             }}
           >
             <input
+              data-fly-ui
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Something for the fly"
@@ -167,8 +217,10 @@ export function Chrome() {
               style={{ touchAction: "auto" }}
             />
             <button
-              type="submit"
+              type="button"
+              data-fly-ui
               disabled={busy}
+              onClick={() => void send()}
               className="h-11 shrink-0 rounded-full bg-ivory px-4 text-sm text-void disabled:opacity-50"
             >
               {busy ? "…" : "Drop"}

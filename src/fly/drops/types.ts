@@ -29,6 +29,7 @@ export type DropItem = {
   pinned: boolean;
   rest: DropRest | null;
   mesh?: MeshSpec | null;
+  stage?: "token" | "solid" | "painted";
 };
 
 export type Catalog = {

@@ -174,6 +174,37 @@ function partMesh(part: MeshPart, target: number, spec: MeshSpec) {
   return mesh;
 }
 
+export function emojiMedallion(glyph: string, target: number) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "#f6f1ea";
+  ctx.fillRect(0, 0, 256, 256);
+  ctx.font = "168px 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(glyph, 128, 138);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  const mat = new THREE.MeshPhysicalMaterial({
+    map: tex,
+    color: "#ffffff",
+    roughness: 0.38,
+    metalness: 0.06,
+    clearcoat: 0.2,
+  });
+  const token = new THREE.Mesh(new THREE.CylinderGeometry(target * 0.46, target * 0.46, target * 0.14, 40), mat);
+  token.castShadow = true;
+  token.receiveShadow = true;
+  token.position.y = target * 0.08;
+  const group = new THREE.Group();
+  group.add(token);
+  return group;
+}
+
 export function sculptFromImage(img: CanvasImageSource | null, target: number, spec?: MeshSpec | null) {
   const body = sanitizeMesh(spec ?? {});
   const group = new THREE.Group();

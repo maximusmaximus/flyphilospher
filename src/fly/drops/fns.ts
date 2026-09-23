@@ -1,22 +1,33 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { acceptablePrompt } from "./prompt";
+
+const promptField = z.string().max(240).refine(acceptablePrompt, "say what should fall");
+
 export const listDrops = createServerFn({ method: "GET" }).handler(async () => {
   const { readPublicCatalog } = await import("./persist.server");
   return readPublicCatalog();
 });
 
+export const placeDrop = createServerFn({ method: "POST" })
+  .validator(z.object({ prompt: promptField, id: z.string().min(4).max(80), mesh: z.unknown() }))
+  .handler(async ({ data }) => {
+    const { placeDrop: place } = await import("./persist.server");
+    return place(data.prompt, data.id, data.mesh);
+  });
+
 export const designDrop = createServerFn({ method: "POST" })
-  .validator(z.object({ prompt: z.string().min(2).max(240) }))
+  .validator(z.object({ prompt: promptField, id: z.string().min(4).max(80).optional() }))
   .handler(async ({ data }) => {
     const { designDrop: design } = await import("./persist.server");
-    return design(data.prompt);
+    return design(data.prompt, data.id);
   });
 
 export const submitDrop = createServerFn({ method: "POST" })
   .validator(
     z.object({
-      prompt: z.string().min(2).max(240),
+      prompt: promptField,
       quality: z.enum(["high", "low"]),
       enhanced: z.string().max(1500).optional(),
       mesh: z.unknown().optional(),

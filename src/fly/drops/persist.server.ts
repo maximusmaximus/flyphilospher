@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { nextOpenSlot } from "./schedule";
 import type { Catalog, DropItem, MeshSpec } from "./types";
 import { sanitizeMesh } from "./mesh";
+import { acceptablePrompt, describePrompt } from "./prompt";
 
 const ROOT = process.cwd();
 const DROP_DIR = path.join(ROOT, "public", "drops");
@@ -187,7 +187,7 @@ async function defaultVenice(pathName: string, body: unknown, key: string) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(slow ? 55000 : 28000),
+    signal: AbortSignal.timeout(slow ? 70000 : 45000),
   });
   return res;
 }
@@ -259,44 +259,72 @@ async function designObject(prompt: string, key: string) {
   throw new Error(last);
 }
 
-export function designDrop(prompt: string) {
+function freshItem(prompt: string, id: string, mesh: MeshSpec, now: number): DropItem {
+  return {
+    id,
+    cid: id,
+    prompt,
+    enhanced: describePrompt(prompt),
+    createdAt: now,
+    dropAt: now - 200,
+    scale: Math.min(3, Math.max(1, scaleFor(id))),
+    image: "",
+    github: null,
+    ipfs: null,
+    pinned: false,
+    rest: null,
+    mesh,
+    stage: "token",
+  };
+}
+
+export function placeDrop(prompt: string, id: string, mesh: unknown) {
   return lock(async () => {
     const clean = prompt.replace(/\s+/g, " ").trim().slice(0, 240);
-    if (clean.length < 2) throw new Error("say what should fall");
+    if (!acceptablePrompt(clean)) throw new Error("say what should fall");
+    const catalog = await readPublicCatalog();
+    const now = Date.now();
+    let item = catalog.items.find((entry) => entry.id === id);
+    if (!item) {
+      item = freshItem(clean, id, sanitizeMesh(mesh), now);
+      await writeCatalog([...catalog.items, item]);
+    } else {
+      item.dropAt = Math.min(item.dropAt, now - 200);
+      await writeCatalog(catalog.items);
+    }
+    return { item, spentToday: catalog.spentToday, budget: BUDGET };
+  });
+}
+
+export function designDrop(prompt: string, id?: string) {
+  return lock(async () => {
+    const clean = prompt.replace(/\s+/g, " ").trim().slice(0, 240);
+    if (!acceptablePrompt(clean)) throw new Error("say what should fall");
     const spent = await readSpend();
     if (spent + 0.02 > BUDGET + 1e-6) throw new Error("that's all for today");
     const key = await readKey();
     let designed: { prompt: string; mesh: MeshSpec };
     try {
-      designed = await designObject(clean, key);
+      designed = await designObject(describePrompt(clean), key);
     } catch (err) {
       throw new Error(friendly(err));
     }
     await writeSpend(spent + 0.02);
     const catalog = await readPublicCatalog();
     const now = Date.now();
-    const dropAt = catalog.items.length < 10 ? now + 400 : nextOpenSlot(catalog.items.map((item) => item.dropAt), now);
-    const id = `m${now.toString(36)}`;
-    const item: DropItem = {
-      id,
-      cid: id,
-      prompt: clean,
-      enhanced: designed.prompt,
-      createdAt: now,
-      dropAt,
-      scale: Math.min(3, Math.max(1, scaleFor(id))),
-      image: "",
-      github: null,
-      ipfs: null,
-      pinned: false,
-      rest: null,
-      mesh: designed.mesh,
-    };
-    await writeCatalog([...catalog.items, item]);
+    const existing = id ? catalog.items.find((entry) => entry.id === id) : undefined;
+    const item = existing ?? freshItem(clean, id || `m${now.toString(36)}`, designed.mesh, now);
+    item.prompt = clean;
+    item.enhanced = designed.prompt;
+    item.mesh = designed.mesh;
+    item.stage = "solid";
+    item.dropAt = Math.min(item.dropAt, now - 200);
+    const items = existing ? catalog.items : [...catalog.items, item];
+    await writeCatalog(items);
     return {
       enhanced: designed.prompt,
       mesh: designed.mesh,
-      dropAt,
+      dropAt: item.dropAt,
       item,
       spentToday: spent + 0.02,
       budget: BUDGET,
@@ -365,7 +393,7 @@ export function generateDrop(
 ) {
   return lock(async () => {
     const clean = prompt.replace(/\s+/g, " ").trim().slice(0, 240);
-    if (clean.length < 2) throw new Error("say what should fall");
+    if (!acceptablePrompt(clean)) throw new Error("say what should fall");
     const reserve = quality === "high" ? 0.12 : 0.08;
     const spent = await readSpend();
     if (spent + reserve > BUDGET + 1e-6) {
@@ -382,11 +410,11 @@ export function generateDrop(
     let image: { buf: Buffer; enhanced: string } | null = null;
     try {
       if (mesh.parts.length < 4) {
-        const made = await designObject(clean, key);
+        const made = await designObject(describePrompt(clean), key);
         drafted = made.prompt;
         mesh = made.mesh;
       }
-      image = await generateImage(drafted, quality, key);
+      image = await generateImage(describePrompt(drafted), quality, key);
     } catch (err) {
       if (existing && mesh.parts.length >= 4) {
         existing.mesh = mesh;
@@ -426,7 +454,7 @@ export function generateDrop(
       prompt: clean,
       enhanced: image.enhanced || drafted,
       createdAt: now,
-      dropAt: catalog.items.length < 10 ? now + 400 : nextOpenSlot(catalog.items.map((entry) => entry.dropAt), now),
+      dropAt: now - 200,
       scale: Math.min(3, Math.max(1, scaleFor(cid))),
       image: imageUrl,
       github: null,
@@ -441,6 +469,8 @@ export function generateDrop(
     item.ipfs = pin.uri;
     item.pinned = pin.pinned;
     item.mesh = mesh;
+    item.stage = "painted";
+    item.dropAt = Math.min(item.dropAt, Date.now() - 200);
     const items = existing ? catalog.items : [...catalog.items, item];
     await writeCatalog(items);
     await writeSpend(spent + reserve);
