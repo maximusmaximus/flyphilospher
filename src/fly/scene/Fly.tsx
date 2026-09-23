@@ -14,59 +14,56 @@ const S = new THREE.Vector3();
 const M4 = new THREE.Matrix4();
 const Y_UP = new THREE.Vector3(0, 1, 0);
 
-const LEGS: Array<{ side: number; z: number; gait: number; fold: number }> = [
-  { side: -1, z: 0.28, gait: 0, fold: 0.7 },
-  { side: 1, z: 0.28, gait: Math.PI, fold: 0.7 },
-  { side: -1, z: 0.02, gait: Math.PI, fold: 0 },
-  { side: 1, z: 0.02, gait: 0, fold: 0 },
-  { side: -1, z: -0.22, gait: 0, fold: -0.65 },
-  { side: 1, z: -0.22, gait: Math.PI, fold: -0.65 },
+const LEGS: Array<{ side: number; hip: THREE.Vector3; foot: THREE.Vector3; tripod: number }> = [
+  { side: -1, hip: new THREE.Vector3(-0.18, 0.36, 0.28), foot: new THREE.Vector3(-0.34, 0.02, 0.55), tripod: 0 },
+  { side: 1, hip: new THREE.Vector3(0.18, 0.36, 0.28), foot: new THREE.Vector3(0.34, 0.02, 0.55), tripod: Math.PI },
+  { side: -1, hip: new THREE.Vector3(-0.22, 0.34, 0.0), foot: new THREE.Vector3(-0.44, 0.02, 0.02), tripod: Math.PI },
+  { side: 1, hip: new THREE.Vector3(0.22, 0.34, 0.0), foot: new THREE.Vector3(0.44, 0.02, 0.02), tripod: 0 },
+  { side: -1, hip: new THREE.Vector3(-0.18, 0.34, -0.26), foot: new THREE.Vector3(-0.36, 0.02, -0.5), tripod: 0 },
+  { side: 1, hip: new THREE.Vector3(0.18, 0.34, -0.26), foot: new THREE.Vector3(0.36, 0.02, -0.5), tripod: Math.PI },
 ];
 
-function Leg({
-  side,
-  z,
-  gait,
-  fold,
-  mats,
-}: {
-  side: number;
-  z: number;
-  gait: number;
-  fold: number;
-  mats: { chitin: THREE.MeshPhysicalMaterial; dark: THREE.MeshPhysicalMaterial };
-}) {
-  const root = useRef<THREE.Group>(null);
-  useFrame(() => {
-    const f = sim.fly;
-    const m = sim.motor;
-    const air = f.airborne ? 1 : 0;
-    const drive = Math.min(1, m.leg * 1.15 + m.walkFwd * 0.65 + (m.walking ? 0.4 : 0));
-    const swing = Math.sin(f.walkPhase + gait);
-    const stride = Math.cos(f.walkPhase + gait) * 0.22 * drive * (1 - air);
-    if (!root.current) return;
-    root.current.rotation.x = stride;
-    root.current.position.y = Math.max(0, swing) * 0.045 * drive * (1 - air) + air * 0.06;
-    root.current.rotation.z = air * side * 0.25;
-  });
-  const s = side;
-  return (
-    <group ref={root} position={[0, 0, z]}>
-      <mesh position={[s * 0.14, 0.5, 0]} rotation={[fold * 0.2, 0, s * -0.85]} material={mats.dark} castShadow>
-        <capsuleGeometry args={[0.014, 0.08, 3, 5]} />
-      </mesh>
-      <mesh position={[s * 0.3, 0.4, fold * 0.05]} rotation={[fold * 0.25, 0, s * -0.28]} material={mats.chitin} castShadow>
-        <capsuleGeometry args={[0.012, 0.2, 3, 6]} />
-      </mesh>
-      <mesh position={[s * 0.34, 0.2, fold * 0.1]} rotation={[0.35, 0, s * 0.18]} material={mats.dark} castShadow>
-        <capsuleGeometry args={[0.008, 0.26, 3, 5]} />
-      </mesh>
-      <mesh position={[s * 0.3, 0.05, fold * 0.12]} rotation={[0.7, 0, s * 0.05]} material={mats.dark} castShadow>
-        <capsuleGeometry args={[0.0045, 0.1, 2, 4]} />
-      </mesh>
-    </group>
-  );
+const COXA = 0.07;
+const FEMUR = 0.2;
+const LOWER = 0.22;
+const TARSUS = 0.1;
+const SWING = 0.42;
+
+type Plant = { x: number; z: number; swing: boolean; ready: boolean };
+
+function ikKnee(a: THREE.Vector3, foot: THREE.Vector3, fem: number, lower: number, side: number, knee: THREE.Vector3) {
+  const delta = TMP.copy(foot).sub(a);
+  const dist = THREE.MathUtils.clamp(delta.length(), Math.abs(fem - lower) + 0.001, fem + lower - 0.001);
+  delta.multiplyScalar(1 / dist);
+  const cosA = THREE.MathUtils.clamp((fem * fem + dist * dist - lower * lower) / (2 * fem * dist), -1, 1);
+  const ang = Math.acos(cosA);
+  const out = P.set(side, 0.4, 0).normalize();
+  const bend = S.crossVectors(delta, out);
+  if (bend.lengthSq() < 1e-8) bend.set(side, 0, 0);
+  bend.normalize();
+  knee.copy(a).addScaledVector(delta, Math.cos(ang) * fem).addScaledVector(bend, Math.sin(ang) * fem);
+  if (Math.sign(knee.x || side) !== side) {
+    knee.copy(a).addScaledVector(delta, Math.cos(ang) * fem).addScaledVector(bend.negate(), Math.sin(ang) * fem);
+  }
 }
+
+function placeBone(mesh: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) {
+  const span = Math.max(0.001, a.distanceTo(b));
+  mesh.position.lerpVectors(a, b, 0.5);
+  P.copy(b).sub(a).multiplyScalar(1 / span);
+  Q.setFromUnitVectors(Y_UP, P);
+  mesh.quaternion.copy(Q);
+  const geo = mesh.geometry as THREE.CapsuleGeometry;
+  const params = geo.parameters as { radius: number; length?: number; height?: number };
+  const base = (params.length ?? params.height ?? 0.1) + params.radius * 2;
+  mesh.scale.set(1, span / base, 1);
+}
+
+const FOOT = new THREE.Vector3();
+const COX = new THREE.Vector3();
+const KNEE = new THREE.Vector3();
+const ANK = new THREE.Vector3();
+const GOAL = new THREE.Vector3();
 
 export function FlyMesh() {
   const group = useRef<THREE.Group>(null);
@@ -78,6 +75,8 @@ export function FlyMesh() {
   const haltR = useRef<THREE.Group>(null);
   const head = useRef<THREE.Group>(null);
   const abdomen = useRef<THREE.Group>(null);
+  const bones = useRef<Array<Array<THREE.Mesh | null>>>(LEGS.map(() => [null, null, null, null]));
+  const plants = useRef<Plant[]>(LEGS.map(() => ({ x: 0, z: 0, swing: false, ready: false })));
 
   const maps = useMemo(
     () => ({
@@ -171,7 +170,7 @@ export function FlyMesh() {
         new THREE.Vector2(0.05, 0.92),
         new THREE.Vector2(0, 0.98),
       ],
-      28,
+      48,
     );
     g.rotateX(-Math.PI / 2);
     g.computeVertexNormals();
@@ -225,9 +224,10 @@ export function FlyMesh() {
     const m = sim.motor;
     const flying = f.airborne || m.flying || m.giantFiber > 0.2;
     const wingDrive = Math.min(1.4, m.wingPower * 0.85 + Math.abs(m.wingSteer) * 0.25 + (flying ? 0.65 : 0.04));
-    const legDrive = Math.min(1.2, m.leg * 1.1 + m.walkFwd * 0.55 + (m.walking ? 0.35 : 0));
+    const groundSpeed = Math.hypot(f.vx, f.vz);
+    const stepping = !flying && groundSpeed > 0.008;
     f.wingPhase += d * (flying ? 46 + wingDrive * 36 : 2.4 + m.wingPower * 5);
-    f.walkPhase += d * (2 + legDrive * 14);
+    if (stepping) f.walkPhase += d * Math.min(14, 6.5 + groundSpeed * 160);
     const beat = Math.sin(f.wingPhase);
     const amp = flying ? 0.42 + wingDrive * 0.55 : 0.035 + m.wingPower * 0.05;
     const steer = m.wingSteer * 0.18;
@@ -263,13 +263,73 @@ export function FlyMesh() {
       abdomen.current.rotation.x = -0.12 + Math.sin(f.walkPhase * 0.5) * 0.05 + (flying ? -0.14 : 0);
     }
     if (group.current) {
-      group.current.position.set(f.x, f.y, f.z);
+      const bob = stepping ? Math.sin(f.walkPhase * 2) * 0.0035 : 0;
+      group.current.position.set(f.x, f.y + bob, f.z);
       FWD.set(-Math.sin(f.yaw), 0, -Math.cos(f.yaw));
       TMP.copy(group.current.position).add(FWD);
       group.current.lookAt(TMP);
       group.current.up.copy(UP);
-      group.current.rotateX(f.pitch);
-      group.current.rotateZ(f.roll);
+      group.current.rotateX(f.pitch + (stepping ? Math.sin(f.walkPhase) * 0.03 : 0));
+      group.current.rotateZ(f.roll + (stepping ? Math.sin(f.walkPhase) * 0.05 : 0));
+      group.current.updateMatrixWorld(true);
+      const body = group.current;
+      for (let i = 0; i < LEGS.length; i++) {
+        const leg = LEGS[i]!;
+        const chain = bones.current[i];
+        const plant = plants.current[i];
+        if (!chain || !plant || !chain[0] || !chain[1] || !chain[2] || !chain[3]) continue;
+        const phase = (f.walkPhase + leg.tripod) % (Math.PI * 2);
+        const swinging = stepping && phase / (Math.PI * 2) < SWING;
+        const swingU = swinging ? phase / (Math.PI * 2) / SWING : 0;
+        if (flying) {
+          FOOT.copy(leg.hip).add(GOAL.set(leg.side * 0.1, -0.04, leg.foot.z > 0 ? 0.08 : -0.1));
+          plant.ready = false;
+          plant.swing = false;
+        } else if (!stepping) {
+          FOOT.copy(leg.foot);
+          body.localToWorld(GOAL.copy(leg.foot));
+          plant.x = GOAL.x;
+          plant.z = GOAL.z;
+          plant.ready = true;
+          plant.swing = false;
+        } else if (swinging) {
+          body.localToWorld(GOAL.copy(leg.foot));
+          if (!plant.ready) {
+            plant.x = GOAL.x;
+            plant.z = GOAL.z;
+            plant.ready = true;
+          }
+          const lift = Math.sin(Math.min(1, swingU) * Math.PI);
+          const blend = swingU * swingU * (3 - 2 * swingU);
+          FOOT.set(plant.x + (GOAL.x - plant.x) * blend, f.y + 0.006 + lift * 0.028, plant.z + (GOAL.z - plant.z) * blend);
+          body.worldToLocal(FOOT);
+        } else {
+          body.localToWorld(GOAL.copy(leg.foot));
+          if (plant.swing || !plant.ready) {
+            plant.x = GOAL.x;
+            plant.z = GOAL.z;
+            plant.ready = true;
+          }
+          FOOT.set(plant.x, f.y + 0.004, plant.z);
+          body.worldToLocal(FOOT);
+        }
+        plant.swing = swinging;
+        COX.copy(leg.hip);
+        P.copy(leg.foot).sub(leg.hip);
+        P.y = -0.05;
+        if (P.lengthSq() < 1e-6) P.set(leg.side, -1, 0);
+        P.setLength(COXA);
+        COX.add(P);
+        ikKnee(COX, FOOT, FEMUR, LOWER, leg.side, KNEE);
+        ANK.copy(FOOT).sub(KNEE);
+        if (ANK.lengthSq() < 1e-8) ANK.set(0, -1, 0);
+        ANK.setLength(TARSUS);
+        ANK.copy(FOOT).sub(ANK);
+        placeBone(chain[0], leg.hip, COX);
+        placeBone(chain[1], COX, KNEE);
+        placeBone(chain[2], KNEE, ANK);
+        placeBone(chain[3], ANK, FOOT);
+      }
     }
   });
 
@@ -277,7 +337,7 @@ export function FlyMesh() {
     <group ref={group} name="housefly" scale={0.11}>
       <group position={[0, 0, 0]}>
         <mesh position={[0, 0.58, 0.02]} material={mats.chitin} scale={[0.92, 0.7, 1.05]} castShadow receiveShadow>
-          <sphereGeometry args={[0.4, 32, 24]} />
+          <sphereGeometry args={[0.4, 64, 48]} />
         </mesh>
         <mesh position={[0, 0.72, -0.28]} material={mats.chitin} scale={[0.55, 0.28, 0.36]} castShadow>
           <sphereGeometry args={[0.28, 16, 12]} />
@@ -361,8 +421,45 @@ export function FlyMesh() {
           </mesh>
         </group>
 
-        {LEGS.map((leg) => (
-          <Leg key={`${leg.side}-${leg.z}`} {...leg} mats={mats} />
+        {LEGS.map((leg, i) => (
+          <group key={`${leg.side}-${leg.hip.z}`}>
+            <mesh
+              ref={(node) => {
+                bones.current[i]![0] = node;
+              }}
+              material={mats.dark}
+              castShadow
+            >
+              <capsuleGeometry args={[0.012, 0.046, 5, 8]} />
+            </mesh>
+            <mesh
+              ref={(node) => {
+                bones.current[i]![1] = node;
+              }}
+              material={mats.chitin}
+              castShadow
+            >
+              <capsuleGeometry args={[0.011, 0.178, 6, 10]} />
+            </mesh>
+            <mesh
+              ref={(node) => {
+                bones.current[i]![2] = node;
+              }}
+              material={mats.dark}
+              castShadow
+            >
+              <capsuleGeometry args={[0.007, 0.106, 5, 8]} />
+            </mesh>
+            <mesh
+              ref={(node) => {
+                bones.current[i]![3] = node;
+              }}
+              material={mats.dark}
+              castShadow
+            >
+              <capsuleGeometry args={[0.0035, 0.093, 4, 6]} />
+            </mesh>
+          </group>
         ))}
       </group>
     </group>

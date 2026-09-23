@@ -162,8 +162,12 @@ export function Loop() {
       }
       return touch;
     };
+    const stepping = !f.airborne && Math.hypot(f.vx, f.vz) > 0.008;
+    const tripod = [0, Math.PI, Math.PI, 0, 0, Math.PI];
     for (let i = 0; i < 6; i++) {
-      const down = Math.sin(f.walkPhase + (i % 2 === 0 ? 0 : Math.PI)) < 0.2 ? 1 : 0.12;
+      const phase = (f.walkPhase + tripod[i]!) % (Math.PI * 2);
+      const swinging = stepping && phase / (Math.PI * 2) < 0.42;
+      const down = swinging ? 0.08 : 1;
       const side = i % 2 === 0 ? -1 : 1;
       const v = stance * (0.2 + down * 0.8) + limbTouch(side) * (i < 2 ? 1 : 0.65);
       if (i === 0) s.limb0 = v;

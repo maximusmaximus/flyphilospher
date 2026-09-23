@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
 import { quality } from "../quality";
 import type { MeshPart, MeshSpec } from "./types";
 import { sanitizeMesh } from "./mesh";
@@ -211,10 +212,81 @@ export function emojiMedallion(glyph: string, target: number) {
   return group;
 }
 
+function smoothSolid(spec: MeshSpec, target: number) {
+  const res = quality.mobile ? 28 : quality.spectral ? 42 : 34;
+  const mat = new THREE.MeshPhysicalMaterial({
+    vertexColors: true,
+    roughness: spec.roughness,
+    metalness: spec.metalness,
+    clearcoat: 0.35,
+    clearcoatRoughness: 0.25,
+    sheen: 0.4,
+    sheenRoughness: 0.5,
+    sheenColor: new THREE.Color("#f2ebe3"),
+    iridescence: quality.spectral ? 0.2 : 0,
+    iridescenceIOR: 1.3,
+    iridescenceThicknessRange: [80, 320],
+  });
+  const blob = new MarchingCubes(res, mat, false, true, 24000);
+  blob.isolation = 70;
+  blob.reset();
+  for (const part of spec.parts) {
+    const color = new THREE.Color(part.color);
+    const along = Math.max(part.size[0], part.size[1], part.size[2]);
+    const steps = along > 0.45 ? 3 : 1;
+    for (let i = 0; i < steps; i++) {
+      const t = steps === 1 ? 0.5 : i / (steps - 1);
+      const axis = part.size[0] >= part.size[1] && part.size[0] >= part.size[2] ? 0 : part.size[1] >= part.size[2] ? 1 : 2;
+      const shift = (t - 0.5) * part.size[axis] * 0.7;
+      const at = [part.at[0], part.at[1], part.at[2]];
+      at[axis] += shift;
+      const x = THREE.MathUtils.clamp(0.5 + at[0] * 0.2, 0.16, 0.84);
+      const y = THREE.MathUtils.clamp(0.38 + at[1] * 0.18, 0.16, 0.84);
+      const z = THREE.MathUtils.clamp(0.5 + at[2] * 0.2, 0.16, 0.84);
+      const bulk = (part.size[0] + part.size[1] + part.size[2]) / 3;
+      const strength = THREE.MathUtils.clamp((0.55 + bulk * 0.85) / steps, 0.2, 1.1);
+      blob.addBall(x, y, z, strength, 12, color);
+    }
+  }
+  blob.update();
+  const drawn = blob.geometry.drawRange.count;
+  if (drawn < 12) {
+    blob.geometry.dispose();
+    mat.dispose();
+    return null;
+  }
+  const pos = blob.geometry.getAttribute("position");
+  const min = new THREE.Vector3(Infinity, Infinity, Infinity);
+  const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+  const vert = new THREE.Vector3();
+  for (let i = 0; i < drawn; i++) {
+    vert.fromBufferAttribute(pos, i);
+    min.min(vert);
+    max.max(vert);
+  }
+  const size = new THREE.Vector3().subVectors(max, min);
+  const center = new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5);
+  const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+  const fit = target / maxDim;
+  blob.scale.setScalar(fit);
+  blob.position.set(-center.x * fit, -min.y * fit, -center.z * fit);
+  blob.castShadow = true;
+  blob.receiveShadow = true;
+  blob.frustumCulled = false;
+  return blob;
+}
+
 export function sculptFromImage(img: CanvasImageSource | null, target: number, spec?: MeshSpec | null) {
   const body = sanitizeMesh(spec ?? {});
   const group = new THREE.Group();
   const designed = !!spec && spec.parts.length >= 3;
+  if (designed) {
+    const solid = smoothSolid(body, target);
+    if (solid) {
+      group.add(solid);
+      return group;
+    }
+  }
   if (!designed && img) {
     const skin = shellMesh(img, target, body);
     if (skin) group.add(skin);
