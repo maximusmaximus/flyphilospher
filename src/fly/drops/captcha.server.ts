@@ -129,7 +129,7 @@ function render(answer: string) {
       return `<path d="${pathOf(glyph, ox, oy, rnd() * 6, turn)}" fill="none" stroke="#f6f1ea" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>`;
     })
     .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Code"><rect width="${w}" height="${h}" rx="16" fill="#100e12"/>${noise(rnd, w, h)}${glyphs}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="auto" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Code"><rect width="${w}" height="${h}" rx="16" fill="#100e12"/>${noise(rnd, w, h)}${glyphs}</svg>`;
 }
 
 export function issueCaptcha() {

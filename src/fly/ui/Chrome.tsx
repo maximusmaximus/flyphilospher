@@ -303,15 +303,7 @@ export function Chrome() {
           </div>
         </div>
         {composer ? (
-          <div
-            data-fly-ui
-            className="pointer-events-auto absolute left-1/2 z-30 w-[min(92vw,440px)] -translate-x-1/2 overflow-auto rounded-3xl border border-ivory/30 bg-void/92 p-4 text-ivory shadow-[0_18px_70px_rgba(0,0,0,0.45)]"
-            style={{
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              maxHeight: "min(86dvh, 640px)",
-            }}
-          >
+          <div data-fly-ui className="composer-card pointer-events-auto overflow-x-hidden overflow-y-auto rounded-3xl border border-ivory/30 bg-void/92 p-4 text-ivory shadow-[0_18px_70px_rgba(0,0,0,0.45)]">
             <div className="flex items-center justify-between gap-3">
               <div className="text-[12px] tracking-[0.16em] text-fog">What should fall</div>
               <button
@@ -347,6 +339,7 @@ export function Chrome() {
                 data-fly-ui
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
+                name="code"
                 placeholder="Type the code"
                 autoCapitalize="characters"
                 autoCorrect="off"

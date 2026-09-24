@@ -49,3 +49,39 @@
     scroll-behavior: auto;
   }
 }
+
+.composer-card {
+  position: absolute;
+  z-index: 30;
+  box-sizing: border-box;
+  min-width: 0;
+  left: 50%;
+  top: 50%;
+  width: min(92vw, 440px);
+  max-height: min(86dvh, 640px);
+  transform: translate(-50%, -50%);
+  touch-action: auto;
+}
+
+.composer-card svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+}
+
+@media (max-width: 819px) {
+  .composer-card {
+    top: calc(env(safe-area-inset-top) + 68px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 80px);
+    transform: none;
+  }
+
+  .composer-card input[name="code"] {
+    letter-spacing: 0.12em;
+    font-size: 16px;
+  }
+}
