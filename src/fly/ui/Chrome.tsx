@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { designDrop, listDrops, placeDrop, submitDrop } from "../drops/fns";
+import { designDrop, issueCaptcha, listDrops, placeDrop, submitDrop } from "../drops/fns";
 import { acceptablePrompt, tokenMesh } from "../drops/prompt";
+import { solvePow } from "../drops/sha256";
 import { formatCountdown, nextDropAt } from "../drops/schedule";
 import type { DropItem } from "../drops/types";
 import { detectQuality } from "../quality";
@@ -89,7 +90,7 @@ const STEPS = [
   "Drag to look around. Pinch or scroll to come closer. The view stays on the room.",
   "Lean in and the fly leaves the stone. Back away and it lands. It will not pass through the glass.",
   "Each leg, the hairs, the antennae, and the wings report into the brain at the lower right.",
-  "Type something. A ring shows the writing, the shape, and the paint. It falls only when the object is whole.",
+  "Type what should fall. Read the code in the center, then it can be made. Hide the card when you want the room.",
   "Tap an object to see what it is. The mirror grows as the stone fills. The fly remembers the shapes.",
 ];
 
@@ -107,6 +108,27 @@ export function Chrome() {
   const [phase, setPhase] = useState("");
   const [phaseWhen, setPhaseWhen] = useState<number | null>(null);
   const [pending, setPending] = useState<{ prompt: string; step: number } | null>(null);
+  const [composer, setComposer] = useState(true);
+  const [challenge, setChallenge] = useState<{ id: string; svg: string; bits: number; length: number } | null>(null);
+  const [code, setCode] = useState("");
+  const [trap, setTrap] = useState("");
+
+  useEffect(() => {
+    if (!composer) return;
+    let gone = false;
+    void issueCaptcha()
+      .then((next) => {
+        if (gone) return;
+        setChallenge(next);
+        setCode("");
+      })
+      .catch((err) => {
+        if (!gone) setError(err instanceof Error ? err.message : "the check could not start");
+      });
+    return () => {
+      gone = true;
+    };
+  }, [composer]);
 
   useEffect(() => {
     const apply = () => setMobile(detectQuality().mobile || window.innerWidth < 820);
@@ -159,14 +181,18 @@ export function Chrome() {
 
   const send = async () => {
     const text = prompt.trim();
-    if (!acceptablePrompt(text) || busy) return;
-    const now = Date.now();
+    if (!acceptablePrompt(text) || busy || !challenge) return;
+    if (code.trim().length < challenge.length) {
+      setError("type the code in the picture");
+      return;
+    }
+    const stamp = Date.now();
     const optimistic: DropItem = {
-      id: `m${now.toString(36)}`,
-      cid: `m${now.toString(36)}`,
+      id: `m${stamp.toString(36)}`,
+      cid: `m${stamp.toString(36)}`,
       prompt: text,
       enhanced: text,
-      createdAt: now,
+      createdAt: stamp,
       dropAt: now - 200,
       scale: 1.4,
       image: "",
@@ -180,13 +206,35 @@ export function Chrome() {
     setPrompt("");
     setBusy(true);
     setError("");
+    setComposer(false);
     setPending({ prompt: text, step: 0 });
+    let nonce = "";
+    try {
+      await new Promise((resolve) => window.setTimeout(resolve, 16));
+      nonce = solvePow(challenge.id, challenge.bits);
+    } catch {
+      setError("the check failed");
+      setBusy(false);
+      setPending(null);
+      setComposer(true);
+      return;
+    }
     try {
       const quality = detectQuality().mobile ? "low" : "high";
-      const placed = await placeDrop({ data: { prompt: text, id: optimistic.id, mesh: optimistic.mesh } });
+      const placed = await placeDrop({
+        data: {
+          prompt: text,
+          id: optimistic.id,
+          mesh: optimistic.mesh,
+          captchaId: challenge.id,
+          answer: code,
+          nonce,
+          trap,
+        },
+      });
       setPending({ prompt: text, step: 1 });
       try {
-        const designed = await designDrop({ data: { prompt: text, id: placed.item.id } });
+        const designed = await designDrop({ data: { prompt: text, id: placed.item.id, grant: placed.grant } });
         setPending({ prompt: text, step: 2 });
         const result = await submitDrop({
           data: {
@@ -195,6 +243,7 @@ export function Chrome() {
             enhanced: designed.enhanced,
             mesh: designed.mesh,
             id: designed.item.id,
+            grant: placed.grant,
           },
         });
         const item = { ...result.item, dropAt: Math.min(result.item.dropAt, Date.now() - 200) };
@@ -203,9 +252,13 @@ export function Chrome() {
         sim.say(`${item.prompt} is falling.`);
         if (result.painted === false) setError("the paint failed, the solid is still falling");
       } catch (err) {
+        setPrompt(text);
+        setComposer(true);
         setError(err instanceof Error ? err.message : "the maker is still catching up");
       }
     } catch (err) {
+      setPrompt(text);
+      setComposer(true);
       setError(err instanceof Error ? err.message : "it could not be saved");
     } finally {
       setPending(null);
@@ -236,56 +289,123 @@ export function Chrome() {
         </button>
         <div
           data-fly-ui
-          className="pointer-events-auto absolute flex gap-2"
+          className="pointer-events-auto absolute rounded-2xl border border-ivory/20 bg-void/80 px-3 py-1.5 text-ivory"
           style={{
             top: "max(10px, env(safe-area-inset-top))",
-            left: mobile ? "max(64px, calc(env(safe-area-inset-left) + 60px))" : "max(72px, env(safe-area-inset-left))",
             right: "max(10px, env(safe-area-inset-right))",
-            flexDirection: mobile ? "column" : "row",
-            alignItems: "stretch",
           }}
         >
-          <form
-            method="dialog"
-            className="flex min-w-0 flex-1 gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void send();
-            }}
-          >
-            <input
-              data-fly-ui
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Something for the fly"
-              maxLength={240}
-              className="h-11 min-w-0 flex-1 rounded-full border border-ivory/25 bg-void/80 px-4 text-base text-ivory outline-none select-text"
-              style={{ touchAction: "auto" }}
-            />
-            <button
-              type="button"
-              data-fly-ui
-              disabled={busy}
-              onClick={() => void send()}
-              className="h-11 shrink-0 rounded-full bg-ivory px-4 text-sm text-void disabled:opacity-50"
-            >
-              {busy ? "…" : "Drop"}
-            </button>
-          </form>
-          <div className="rounded-2xl border border-ivory/20 bg-void/80 px-3 py-1.5 text-ivory">
-            <div className="font-mono text-[13px] tabular-nums tracking-[0.14em]">
-              {phaseWhen ? (phaseWhen <= now + 1500 ? "now" : formatCountdown(phaseWhen - now)) : free && !upcoming ? "now" : formatCountdown(nextAt - now)}
-            </div>
-            <div className="max-w-[200px] truncate text-[11px] text-fog">
-              {phase || (upcoming ? upcoming.prompt : free ? "drops right away" : "next opening")}
-            </div>
+          <div className="font-mono text-[13px] tabular-nums tracking-[0.14em]">
+            {phaseWhen ? (phaseWhen <= now + 1500 ? "now" : formatCountdown(phaseWhen - now)) : free && !upcoming ? "now" : formatCountdown(nextAt - now)}
+          </div>
+          <div className="max-w-[140px] truncate text-[11px] text-fog">
+            {phase || (upcoming ? upcoming.prompt : free ? "drops right away" : "next opening")}
           </div>
         </div>
+        {composer ? (
+          <div
+            data-fly-ui
+            className="pointer-events-auto absolute left-1/2 z-30 w-[min(92vw,440px)] -translate-x-1/2 overflow-auto rounded-3xl border border-ivory/30 bg-void/92 p-4 text-ivory shadow-[0_18px_70px_rgba(0,0,0,0.45)]"
+            style={{
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+              maxHeight: "min(86dvh, 640px)",
+            }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[12px] tracking-[0.16em] text-fog">What should fall</div>
+              <button
+                type="button"
+                aria-label="Minimize"
+                onClick={() => setComposer(false)}
+                className="grid h-9 w-9 place-items-center rounded-full border border-ivory/30 text-lg leading-none text-ivory"
+              >
+                –
+              </button>
+            </div>
+            <form
+              className="mt-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void send();
+              }}
+            >
+              <input
+                data-fly-ui
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Something for the fly"
+                maxLength={240}
+                className="h-12 w-full rounded-2xl border border-ivory/25 bg-void px-4 text-base text-ivory outline-none select-text"
+                style={{ touchAction: "auto" }}
+              />
+              <div
+                className="mt-3 overflow-hidden rounded-2xl border border-ivory/15"
+                dangerouslySetInnerHTML={{ __html: challenge?.svg ?? "" }}
+              />
+              <input
+                data-fly-ui
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="Type the code"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={8}
+                className="mt-2 h-11 w-full rounded-2xl border border-ivory/25 bg-void px-4 text-center text-lg tracking-[0.28em] text-ivory outline-none select-text"
+                style={{ touchAction: "auto" }}
+              />
+              <input
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden
+                value={trap}
+                onChange={(e) => setTrap(e.target.value)}
+                className="pointer-events-none absolute h-0 w-0 opacity-0"
+              />
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  className="h-11 flex-1 rounded-full border border-ivory/25 text-sm text-ivory"
+                  onClick={() => {
+                    setChallenge(null);
+                    void issueCaptcha()
+                      .then((next) => {
+                        setChallenge(next);
+                        setCode("");
+                      })
+                      .catch((err) => setError(err instanceof Error ? err.message : "the check could not start"));
+                  }}
+                >
+                  New code
+                </button>
+                <button
+                  type="submit"
+                  disabled={busy || !challenge}
+                  className="h-11 flex-1 rounded-full bg-ivory text-sm text-void disabled:opacity-50"
+                >
+                  {busy ? "…" : "Drop"}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <button
+            type="button"
+            data-fly-ui
+            aria-label="What to drop"
+            onClick={() => setComposer(true)}
+            className="pointer-events-auto absolute left-1/2 z-30 h-11 -translate-x-1/2 rounded-full border border-ivory/40 bg-void/90 px-4 text-sm text-ivory"
+            style={{ top: "max(12px, env(safe-area-inset-top))" }}
+          >
+            What to drop
+          </button>
+        )}
         {pending ? <PhaseRing prompt={pending.prompt} step={pending.step} /> : null}
         {error ? (
           <div
-            className="pointer-events-auto absolute left-1/2 -translate-x-1/2 rounded-full bg-void/90 px-3 py-1 text-xs text-ivory"
-            style={{ top: pending ? "calc(env(safe-area-inset-top) + 232px)" : mobile ? "calc(env(safe-area-inset-top) + 118px)" : "calc(env(safe-area-inset-top) + 62px)" }}
+            className="pointer-events-auto absolute left-1/2 z-30 -translate-x-1/2 rounded-full bg-void/90 px-3 py-1 text-xs text-ivory"
+            style={{ bottom: "max(14px, env(safe-area-inset-bottom))" }}
           >
             {error}
           </div>
