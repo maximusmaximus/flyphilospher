@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { quality } from "../quality";
 import type { MeshPart, MeshSpec } from "./types";
 import { sanitizeMesh } from "./mesh";
+import { borderMedian, isBackdrop, maskUsable, poseFor } from "./cutout";
 
 function shellMesh(img: CanvasImageSource, target: number, spec: MeshSpec) {
   const n = quality.mobile ? 176 : 352;
@@ -16,16 +17,8 @@ function shellMesh(img: CanvasImageSource, target: number, spec: MeshSpec) {
   const image = ctx.getImageData(0, 0, n, n);
   const px = image.data;
   const bg = new Uint8Array(n * n);
-  const isBg = (i: number) => {
-    const a = px[i * 4 + 3]!;
-    const r = px[i * 4]!;
-    const g = px[i * 4 + 1]!;
-    const b = px[i * 4 + 2]!;
-    if (a < 16) return true;
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    return 0.3 * r + 0.5 * g + 0.2 * b > 214 && max - min < 28;
-  };
+  const ref = borderMedian(px, n);
+  const isBg = (i: number) => isBackdrop(px[i * 4]!, px[i * 4 + 1]!, px[i * 4 + 2]!, px[i * 4 + 3]!, ref);
   const q = [0, n - 1, (n - 1) * n, n * n - 1];
   while (q.length) {
     const i = q.pop()!;
@@ -53,15 +46,10 @@ function shellMesh(img: CanvasImageSource, target: number, spec: MeshSpec) {
     maxX = Math.max(maxX, x);
     maxY = Math.max(maxY, y);
   }
-  const painted = count > 80 && count < n * n * 0.9;
-  if (!painted) {
-    bg.fill(0);
-    minX = 0;
-    minY = 0;
-    maxX = n - 1;
-    maxY = n - 1;
-    count = n * n;
-  }
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+  if (!maskUsable(count, n * n, spanX, spanY, n)) return null;
+  const upright = poseFor(spanX, spanY) === "upright";
   const dist = new Float32Array(n * n);
   const INF = 1e6;
   for (let i = 0; i < n * n; i++) dist[i] = bg[i] ? 0 : INF;
@@ -98,22 +86,23 @@ function shellMesh(img: CanvasImageSource, target: number, spec: MeshSpec) {
   tex.magFilter = THREE.LinearFilter;
   tex.needsUpdate = true;
 
-  const span = Math.max(maxX - minX, maxY - minY, 1);
+  const span = Math.max(spanX, spanY, 1);
   const s = target / span;
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
   const pos: number[] = [];
   const uv: number[] = [];
   const map = new Int32Array(n * n).fill(-1);
-  const thick = target * Math.max(0.45, spec.depth);
+  const depth = target * (upright ? 0.22 : Math.max(0.26, spec.depth * 0.5));
   for (let y = 0; y < n; y++) {
     for (let x = 0; x < n; x++) {
       const i = y * n + x;
       if (bg[i]) continue;
       map[i] = pos.length / 3;
       const t = Math.min(1, dist[i]! / maxD);
-      const h = Math.pow(t, 0.62) * thick;
-      pos.push((x - cx) * s, h, (cy - y) * s);
+      const puff = Math.pow(t, 0.55) * depth;
+      if (upright) pos.push((x - cx) * s, (cy - y) * s, puff);
+      else pos.push((x - cx) * s, puff, (cy - y) * s);
       uv.push(x / (n - 1), 1 - y / (n - 1));
     }
   }
@@ -123,7 +112,11 @@ function shellMesh(img: CanvasImageSource, target: number, spec: MeshSpec) {
     return null;
   }
   for (let i = 0; i < front; i++) {
-    pos.push(pos[i * 3]!, -target * 0.05, pos[i * 3 + 2]!);
+    const x = pos[i * 3]!;
+    const y = pos[i * 3 + 1]!;
+    const z = pos[i * 3 + 2]!;
+    if (upright) pos.push(x, y, -z * 0.85);
+    else pos.push(x, -y * 0.85, z);
     uv.push(uv[i * 2]!, uv[i * 2 + 1]!);
   }
   const idx: number[] = [];

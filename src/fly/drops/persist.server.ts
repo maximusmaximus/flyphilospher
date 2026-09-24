@@ -218,7 +218,7 @@ async function designObject(prompt: string, key: string) {
           {
             role: "system",
             content:
-              "Design one small physical object as JSON only. Keys: prompt (one sentence, studio photo of one isolated object, seamless white background, no text), metalness 0-1, roughness 0-1, depth 0.35-0.85, parts (8 to 14). Each part: kind ellipsoid|capsule|box|cone, at [x,y,z] from -1 to 1, size [sx,sy,sz] from 0.08 to 1.1, rot [rx,ry,rz] radians, color #rrggbb. y is up and 0 is the ground. A creature needs a body, a head, ears or a tail when it has them, and one part per limb. The parts must form a recognizable solid, not a flat card.",
+              "Design one small physical object as JSON only. Keys: prompt (one sentence: a single real example of the requested thing, filling the frame, plain light background, its own packaging print is allowed), metalness 0-1, roughness 0-1, depth 0.35-0.85, parts (8 to 14). Each part: kind ellipsoid|capsule|box|cone, at [x,y,z] from -1 to 1, size [sx,sy,sz] from 0.08 to 1.1, rot [rx,ry,rz] radians, color #rrggbb. y is up and 0 is the ground. Match the request: a bag is a crimped pouch, not a flat card. A creature needs a body, a head, ears or a tail when it has them, and one part per limb.",
           },
           { role: "user", content: attempt === 0 ? prompt : `${prompt}. Return at least eight solid parts.` },
         ],
@@ -338,17 +338,17 @@ export function designDrop(prompt: string, id?: string) {
 async function generateImage(prompt: string, quality: "high" | "low", key: string) {
   const resolution = quality === "high" ? "2K" : "1K";
   const shared = {
-    prompt: `${prompt}. Photorealistic three dimensional object, one subject, seamless white background, no text.`,
+    prompt: `${prompt}. One real object filling most of the frame, centered, isolated on a plain light background, photoreal product photograph, no extra objects, no border.`,
     enhance_prompt: true,
     aspect_ratio: "1:1",
     resolution,
     format: "png",
-    negative_prompt: "text, letters, watermark, logo, person, hands, collage, frame, blurry, flat icon, pixel art, voxels",
+    negative_prompt: "collage, picture frame, border, watermark, person, hands, blurry, flat icon, pixel art, voxels, tiny object, huge empty background, white card",
     return_binary: false,
   };
   const attempts = [
-    { ...shared, model: "grok-imagine-image-quality", style_preset: "3D Model" },
-    { ...shared, model: "grok-imagine-image", style_preset: "3D Model" },
+    { ...shared, model: "grok-imagine-image-quality", style_preset: "Photographic" },
+    { ...shared, model: "grok-imagine-image", style_preset: "Photographic" },
   ];
   let last = "image failed";
   for (const body of attempts) {
