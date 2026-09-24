@@ -10,7 +10,20 @@ export const COMPOSER = {
   desktopCap: 640,
   artboardW: 320,
   artboardH: 96,
+  mobileAsk: 38,
+  mobileCheck: 56,
 };
+
+export function composerStack(width: number, hasPrompt: boolean) {
+  const mobile = width < COMPOSER.break;
+  const showCheck = !mobile || hasPrompt;
+  const head = mobile ? 28 : 36;
+  const ask = mobile ? COMPOSER.mobileAsk : 48;
+  const check = showCheck ? (mobile ? COMPOSER.mobileCheck + 36 + 36 + 20 : COMPOSER.artboardH + 44 + 44 + 32) : 0;
+  const pad = mobile ? 18 : 32;
+  const gap = mobile ? 6 : 12;
+  return { showCheck, height: head + gap + ask + check + pad };
+}
 
 export function composerBox(width: number, height: number, safeTop = 0, safeBottom = 0) {
   const mobile = width < COMPOSER.break;

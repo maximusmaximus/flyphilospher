@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { issueCaptcha } from "../drops/captcha.server.ts";
-import { COMPOSER, composerBox, fitsViewport } from "./composerLayout.ts";
+import { COMPOSER, composerBox, composerStack, fitsViewport } from "./composerLayout.ts";
 
 process.env.FLY_CAPTCHA_PEEK = "1";
 
@@ -44,4 +44,18 @@ test("the captcha scales instead of forcing 320px", () => {
   assert.match(css, /safe-area-inset-top\) \+ 68px/);
   assert.match(css, /safe-area-inset-bottom\) - 80px/);
   assert.match(css, /\.composer-card svg[\s\S]*width:\s*100%/);
+  assert.match(css, /:not\(\.has-prompt\) \.composer-check/);
+  assert.match(css, /max-height:\s*56px/);
+});
+
+test("a phone starts with a short prompt and adds the code after", () => {
+  const waiting = composerStack(390, false);
+  const ready = composerStack(390, true);
+  const desktop = composerStack(1280, false);
+  assert.equal(waiting.showCheck, false);
+  assert.equal(ready.showCheck, true);
+  assert.equal(desktop.showCheck, true);
+  assert.ok(waiting.height < 110);
+  assert.ok(ready.height < 260);
+  assert.ok(ready.height < desktop.height);
 });

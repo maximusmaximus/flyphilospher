@@ -84,4 +84,43 @@
     letter-spacing: 0.12em;
     font-size: 16px;
   }
+
+  .composer-card {
+    padding: 8px 10px 10px;
+    border-radius: 18px;
+  }
+
+  .composer-card .composer-ask {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+
+  .composer-card .composer-min {
+    height: 28px;
+    width: 28px;
+  }
+
+  .composer-card form {
+    margin-top: 6px;
+  }
+
+  .composer-card .composer-prompt {
+    height: 38px;
+    padding-inline: 12px;
+  }
+
+  .composer-card:not(.has-prompt) .composer-check {
+    display: none;
+  }
+
+  .composer-check svg {
+    max-height: 56px;
+    width: auto;
+    margin-inline: auto;
+  }
+
+  .composer-check input[name="code"],
+  .composer-check button {
+    height: 36px;
+  }
 }

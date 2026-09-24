@@ -303,14 +303,14 @@ export function Chrome() {
           </div>
         </div>
         {composer ? (
-          <div data-fly-ui className="composer-card pointer-events-auto overflow-x-hidden overflow-y-auto rounded-3xl border border-ivory/30 bg-void/92 p-4 text-ivory shadow-[0_18px_70px_rgba(0,0,0,0.45)]">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[12px] tracking-[0.16em] text-fog">What should fall</div>
+          <div data-fly-ui className={`composer-card pointer-events-auto overflow-x-hidden overflow-y-auto rounded-3xl border border-ivory/30 bg-void/92 p-4 text-ivory shadow-[0_18px_70px_rgba(0,0,0,0.45)]${prompt.trim() ? " has-prompt" : ""}`}>
+            <div className="composer-head flex items-center justify-between gap-3">
+              <div className="composer-ask text-[12px] tracking-[0.16em] text-fog">What should fall</div>
               <button
                 type="button"
                 aria-label="Minimize"
                 onClick={() => setComposer(false)}
-                className="grid h-9 w-9 place-items-center rounded-full border border-ivory/30 text-lg leading-none text-ivory"
+                className="composer-min grid h-9 w-9 place-items-center rounded-full border border-ivory/30 text-lg leading-none text-ivory"
               >
                 –
               </button>
@@ -328,9 +328,10 @@ export function Chrome() {
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Something for the fly"
                 maxLength={240}
-                className="h-12 w-full rounded-2xl border border-ivory/25 bg-void px-4 text-base text-ivory outline-none select-text"
+                className="composer-prompt h-12 w-full rounded-2xl border border-ivory/25 bg-void px-4 text-base text-ivory outline-none select-text"
                 style={{ touchAction: "auto" }}
               />
+              <div className="composer-check">
               <div
                 className="mt-3 overflow-hidden rounded-2xl border border-ivory/15"
                 dangerouslySetInnerHTML={{ __html: challenge?.svg ?? "" }}
@@ -379,6 +380,7 @@ export function Chrome() {
                 >
                   {busy ? "…" : "Drop"}
                 </button>
+              </div>
               </div>
             </form>
           </div>
