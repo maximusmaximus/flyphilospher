@@ -55,6 +55,7 @@ export const rig = {
   idle: 0,
   takeoff: 0,
   hold: false,
+  yield: false,
   lastInput: 0,
   airborne: false,
   lastTap: 0,
@@ -81,6 +82,7 @@ function markUser() {
   rig.hold = true;
   rig.idle = 0;
   rig.tracking = 0;
+  rig.yield = true;
   rig.lastInput = performance.now();
   sim.cam.user = true;
 }
@@ -138,6 +140,37 @@ function magnet() {
     rig.shot = "portrait";
     if (!rig.airborne) rig.groundShot = "portrait";
   }
+}
+
+const FIT_CAM = new THREE.Vector3();
+const FIT_LOOK = new THREE.Vector3();
+const FIT_FWD = new THREE.Vector3();
+const FIT_RIGHT = new THREE.Vector3();
+const FIT_UP = new THREE.Vector3();
+const FIT_TO = new THREE.Vector3();
+
+function neededRadius() {
+  const f = sim.fly;
+  SPH.set(Math.max(rig.radius, 0.05), rig.phi, rig.theta);
+  FIT_LOOK.set(rig.lookX + rig.offX, Math.max(VIEW_FLOOR, rig.lookY + rig.offY), rig.lookZ + rig.offZ);
+  FIT_CAM.setFromSpherical(SPH).add(FIT_LOOK);
+  FIT_FWD.copy(FIT_LOOK).sub(FIT_CAM);
+  if (FIT_FWD.lengthSq() < 1e-8) return rig.radius;
+  FIT_FWD.normalize();
+  FIT_RIGHT.crossVectors(FIT_FWD, UP.set(0, 1, 0));
+  if (FIT_RIGHT.lengthSq() < 1e-8) FIT_RIGHT.set(1, 0, 0);
+  FIT_RIGHT.normalize();
+  FIT_UP.crossVectors(FIT_RIGHT, FIT_FWD).normalize();
+  FIT_TO.set(f.x - FIT_CAM.x, f.y + 0.05 - FIT_CAM.y, f.z - FIT_CAM.z);
+  const depth = Math.max(0.05, FIT_TO.dot(FIT_FWD));
+  const vAng = Math.atan2(Math.abs(FIT_TO.dot(FIT_UP)), depth);
+  const hAng = Math.atan2(Math.abs(FIT_TO.dot(FIT_RIGHT)), depth);
+  const vHalf = THREE.MathUtils.degToRad(Math.max(rig.fov, 20)) * 0.5 * 0.68;
+  const hHalf = vHalf * (rig.sizeW / Math.max(1, rig.sizeH));
+  let need = rig.radius;
+  if (vAng > vHalf) need = Math.max(need, rig.radius * (vAng / vHalf));
+  if (hAng > hHalf) need = Math.max(need, rig.radius * (hAng / hHalf));
+  return THREE.MathUtils.clamp(need, MIN_R, MAX_R);
 }
 
 function pinchDist() {
@@ -234,6 +267,7 @@ function installInput(camera: THREE.Camera, el: HTMLCanvasElement) {
   };
 
   const onDown = (e: PointerEvent) => {
+    rig.yield = true;
     if (!inShell(e.target)) return;
     if (e.button !== 0 && e.pointerType === "mouse") return;
     markUser();
@@ -330,6 +364,7 @@ function installInput(camera: THREE.Camera, el: HTMLCanvasElement) {
   };
 
   const onWheel = (e: WheelEvent) => {
+    rig.yield = true;
     if (!inShell(e.target)) return;
     markUser();
     const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
@@ -383,11 +418,9 @@ export function CameraRig() {
     const f = sim.fly;
     window.__flyCamInstall && (window.__flyCamInstall.camera = camera);
 
-    if (f.airborne && !rig.airborne) {
-      rig.takeoff = 2.2;
-      rig.shot = "wide";
-    }
+    if (f.airborne && !rig.airborne) rig.takeoff = 0;
     rig.airborne = f.airborne;
+    if (!f.airborne) rig.yield = false;
     if (rig.takeoff > 0) rig.takeoff = Math.max(0, rig.takeoff - d);
 
     if (ptrs.size > 0 && performance.now() - rig.lastInput > 500) {
@@ -417,14 +450,21 @@ export function CameraRig() {
       }
     }
 
-    if (rig.takeoff > 0) {
-      const k = 1 - Math.exp(-d * 0.55);
-      const wide = 1.35;
-      if (rig.radius < wide) rig.radius += (wide - rig.radius) * k;
-      rig.fov += (WIDE_FOV - rig.fov) * k * 0.4;
+    if (rig.takeoff > 0) rig.takeoff = 0;
+
+    const handsOn = navigating;
+    const framing = !rig.yield && !handsOn && f.airborne;
+    if (framing) {
+      const need = neededRadius();
+      if (need > rig.radius + 0.03) {
+        const k = 1 - Math.exp(-d * 0.32);
+        rig.radius += (need - rig.radius) * k;
+        if (rig.radius > 1.15) rig.shot = "wide";
+        rig.fov += (WIDE_FOV - rig.fov) * k * 0.45;
+      }
     }
 
-    const panK = navigating ? 0 : 1 - Math.exp(-d * 0.28);
+    const panK = !rig.yield && !handsOn ? 1 - Math.exp(-d * 0.28) : 0;
     const lookY = THREE.MathUtils.lerp(SCENE_Y, f.y + 0.02, f.airborne ? 0.3 : 0.65);
     if (panK > 0) {
       rig.lookX += (f.x - rig.lookX) * panK;
