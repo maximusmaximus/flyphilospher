@@ -55,7 +55,7 @@ test("a cat prompt becomes a 3d solid, then a painted drop, even if the paint fa
   const token = await placeDrop("🐱", "memoji01", tokenMesh("🐱"));
   assert.equal(token.item.prompt, "🐱");
   assert.equal(token.item.stage, "token");
-  assert.ok(token.item.dropAt <= Date.now());
+  assert.ok(token.item.dropAt > Date.now());
   const upgraded = await designDrop("🐱", token.item.id);
   assert.equal(upgraded.item.id, "memoji01");
   assert.equal(upgraded.item.prompt, "🐱");
@@ -67,7 +67,7 @@ test("a cat prompt becomes a 3d solid, then a painted drop, even if the paint fa
   assert.ok(designed.item.mesh.parts.length >= 8);
   assert.equal(designed.item.prompt, "a small cat");
   assert.equal(designed.item.image, "");
-  assert.ok(designed.item.dropAt <= Date.now() + 2000);
+  assert.ok(designed.item.dropAt > Date.now());
   const emb = topologyFromParts(designed.item.mesh.parts);
   assert.equal(emb?.length, 16);
 

@@ -25,11 +25,35 @@ type Body = {
   wx: number;
   wy: number;
   wz: number;
+  ex: number;
+  ey: number;
+  ez: number;
   rest: boolean;
   saved: boolean;
   calm: number;
   emb?: number[];
 };
+
+const UP_M = new THREE.Matrix4();
+const UP_Q = new THREE.Quaternion();
+const UP_E = new THREE.Euler();
+
+function formed(item: DropItem) {
+  if (item.stage === "token") return false;
+  const parts = item.mesh?.parts.length ?? 0;
+  if (item.stage === "solid" || item.stage === "painted") return parts >= 3;
+  return parts >= 3 || !!item.image;
+}
+
+function clearance(b: Body) {
+  const ex = b.ex || b.r;
+  const ey = b.ey || b.r;
+  const ez = b.ez || b.r;
+  UP_Q.setFromEuler(UP_E.set(b.rx, b.ry, b.rz));
+  UP_M.makeRotationFromQuaternion(UP_Q);
+  const e = UP_M.elements;
+  return Math.abs(e[1]!) * ex + Math.abs(e[5]!) * ey + Math.abs(e[9]!) * ez;
+}
 
 const bodies = new Map<string, Body>();
 let lastNudge = 0;
@@ -74,6 +98,9 @@ function ensure(item: DropItem, now: number) {
     wx: fresh ? (((h >> 2) % 9) - 4) * 1.4 : 0,
     wy: fresh ? (((h >> 4) % 9) - 4) * 1.1 : 0,
     wz: fresh ? (((h >> 6) % 9) - 4) * 1.6 : 0,
+    ex: 0,
+    ey: 0,
+    ez: 0,
     rest: !fresh,
     saved: !!item.rest || !fresh,
     calm: 0,
@@ -97,6 +124,12 @@ function Piece({ item }: { item: DropItem }) {
       const body = bodies.get(item.id);
       if (body && emb) body.emb = emb;
       if (!sculpt) return;
+      const half = sculpt.userData.half as { x: number; y: number; z: number } | undefined;
+      if (body && half) {
+        body.ex = half.x;
+        body.ey = half.y;
+        body.ez = half.z;
+      }
       mesh.clear();
       mesh.add(sculpt);
     };
@@ -157,7 +190,7 @@ export function Drops() {
   useEffect(() => {
     const id = window.setInterval(() => {
       const now = Date.now();
-      const next = sim.drops.filter((item) => item.dropAt <= now + 80);
+      const next = sim.drops.filter((item) => formed(item) && item.dropAt <= now + 80);
       setShown((prev) => {
         if (prev.length === next.length && prev.every((item, i) => item.id === next[i]?.id && item.image === next[i]?.image && item.stage === next[i]?.stage && (item.mesh?.parts.length ?? 0) === (next[i]?.mesh?.parts.length ?? 0))) {
           return prev;
@@ -170,13 +203,17 @@ export function Drops() {
   useFrame((_, delta) => {
     const d = Math.min(delta, 0.05);
     const now = Date.now();
-    const live = sim.drops.filter((item) => item.dropAt <= now);
+    const live = sim.drops.filter((item) => formed(item) && item.dropAt <= now);
     const ids = new Set(live.map((item) => item.id));
     for (const id of bodies.keys()) if (!ids.has(id)) bodies.delete(id);
     const list = live.map((item) => ensure(item, now));
 
     for (const b of list) {
-      if (b.rest && b.vy === 0 && Math.hypot(b.vx, b.vz) < 0.01) continue;
+      const floor = PEDESTAL_H + 0.012 + clearance(b);
+      if (b.rest && b.vy === 0 && Math.hypot(b.vx, b.vz) < 0.01) {
+        if (b.y < floor) b.y = floor;
+        continue;
+      }
       b.vy -= 4.2 * d;
       b.x += b.vx * d;
       b.y += b.vy * d;
@@ -187,7 +224,6 @@ export function Drops() {
       b.vx *= 1 - Math.min(1, d * 0.35);
       b.vz *= 1 - Math.min(1, d * 0.35);
 
-      const floor = PEDESTAL_H + b.r * 0.28;
       if (b.y < floor) {
         b.y = floor;
         if (b.vy < -0.4) {
@@ -260,6 +296,11 @@ export function Drops() {
           b.rest = false;
         }
       }
+    }
+
+    for (const b of list) {
+      const floor = PEDESTAL_H + 0.012 + clearance(b);
+      if (b.y < floor) b.y = floor;
     }
 
     const flyR = FLY_SIZE * 0.42;

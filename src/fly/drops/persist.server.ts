@@ -124,7 +124,7 @@ export async function readPublicCatalog(): Promise<Catalog> {
   }
   const now = Date.now();
   items.forEach((item, i) => {
-    if (i < 10) item.dropAt = Math.min(item.dropAt, now - 500);
+    if (i < 10 && formed(item)) item.dropAt = Math.min(item.dropAt, now - 500);
   });
   const spentToday = await readSpend();
   return { items, spentToday, budget: BUDGET, day: dayKey() };
@@ -259,6 +259,13 @@ async function designObject(prompt: string, key: string) {
   throw new Error(last);
 }
 
+const HOLD_MS = 20 * 60_000;
+
+function formed(item: DropItem) {
+  const parts = item.mesh?.parts.length ?? 0;
+  return item.stage === "painted" || (item.stage === "solid" && parts >= 4);
+}
+
 function freshItem(prompt: string, id: string, mesh: MeshSpec, now: number): DropItem {
   return {
     id,
@@ -266,7 +273,7 @@ function freshItem(prompt: string, id: string, mesh: MeshSpec, now: number): Dro
     prompt,
     enhanced: describePrompt(prompt),
     createdAt: now,
-    dropAt: now - 200,
+    dropAt: now + HOLD_MS,
     scale: Math.min(3, Math.max(1, scaleFor(id))),
     image: "",
     github: null,
@@ -288,9 +295,6 @@ export function placeDrop(prompt: string, id: string, mesh: unknown) {
     if (!item) {
       item = freshItem(clean, id, sanitizeMesh(mesh), now);
       await writeCatalog([...catalog.items, item]);
-    } else {
-      item.dropAt = Math.min(item.dropAt, now - 200);
-      await writeCatalog(catalog.items);
     }
     return { item, spentToday: catalog.spentToday, budget: BUDGET };
   });
@@ -318,7 +322,6 @@ export function designDrop(prompt: string, id?: string) {
     item.enhanced = designed.prompt;
     item.mesh = designed.mesh;
     item.stage = "solid";
-    item.dropAt = Math.min(item.dropAt, now - 200);
     const items = existing ? catalog.items : [...catalog.items, item];
     await writeCatalog(items);
     return {
@@ -419,6 +422,8 @@ export function generateDrop(
       if (existing && mesh.parts.length >= 4) {
         existing.mesh = mesh;
         existing.enhanced = drafted;
+        existing.stage = "solid";
+        existing.dropAt = Date.now() - 200;
         await writeCatalog(catalog.items);
         return { item: existing, spentToday: spent, budget: BUDGET, painted: false as const };
       }

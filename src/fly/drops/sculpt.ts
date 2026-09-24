@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
 import { quality } from "../quality";
 import type { MeshPart, MeshSpec } from "./types";
 import { sanitizeMesh } from "./mesh";
@@ -152,7 +151,7 @@ function shellMesh(img: CanvasImageSource, target: number, spec: MeshSpec) {
   return mesh;
 }
 
-function partMesh(part: MeshPart, target: number, spec: MeshSpec) {
+function partMesh(part: MeshPart, target: number, spec: MeshSpec, map?: THREE.Texture | null) {
   const seg = quality.seg;
   let geo: THREE.BufferGeometry;
   if (part.kind === "capsule") geo = new THREE.CapsuleGeometry(0.5, 0.6, 4 + seg * 4, 8 + seg * 8);
@@ -160,16 +159,15 @@ function partMesh(part: MeshPart, target: number, spec: MeshSpec) {
   else if (part.kind === "cone") geo = new THREE.ConeGeometry(0.5, 1, 12 + seg * 12);
   else geo = new THREE.SphereGeometry(0.5, 16 + seg * 12, 12 + seg * 8);
   const mat = new THREE.MeshPhysicalMaterial({
-    color: part.color,
-    roughness: spec.roughness,
-    metalness: spec.metalness,
-    clearcoat: spec.metalness > 0.4 ? 0.55 : 0.22,
-    clearcoatRoughness: 0.28,
-    sheen: 0.45,
+    map: map ?? null,
+    color: map ? "#ffffff" : part.color,
+    roughness: map ? 0.4 : spec.roughness,
+    metalness: spec.metalness * 0.6,
+    clearcoat: 0.42,
+    clearcoatRoughness: 0.22,
+    sheen: 0.28,
     sheenColor: new THREE.Color(part.color),
-    iridescence: quality.spectral ? 0.35 : 0,
-    iridescenceIOR: 1.35,
-    iridescenceThicknessRange: [90, 420],
+    envMapIntensity: 1.15,
   });
   const mesh = new THREE.Mesh(geo, mat);
   const k = target * 0.72;
@@ -212,88 +210,49 @@ export function emojiMedallion(glyph: string, target: number) {
   return group;
 }
 
-function smoothSolid(spec: MeshSpec, target: number) {
-  const res = quality.mobile ? 28 : quality.spectral ? 42 : 34;
-  const mat = new THREE.MeshPhysicalMaterial({
-    vertexColors: true,
-    roughness: spec.roughness,
-    metalness: spec.metalness,
-    clearcoat: 0.35,
-    clearcoatRoughness: 0.25,
-    sheen: 0.4,
-    sheenRoughness: 0.5,
-    sheenColor: new THREE.Color("#f2ebe3"),
-    iridescence: quality.spectral ? 0.2 : 0,
-    iridescenceIOR: 1.3,
-    iridescenceThicknessRange: [80, 320],
-  });
-  const blob = new MarchingCubes(res, mat, false, true, 24000);
-  blob.isolation = 70;
-  blob.reset();
-  for (const part of spec.parts) {
-    const color = new THREE.Color(part.color);
-    const along = Math.max(part.size[0], part.size[1], part.size[2]);
-    const steps = along > 0.45 ? 3 : 1;
-    for (let i = 0; i < steps; i++) {
-      const t = steps === 1 ? 0.5 : i / (steps - 1);
-      const axis = part.size[0] >= part.size[1] && part.size[0] >= part.size[2] ? 0 : part.size[1] >= part.size[2] ? 1 : 2;
-      const shift = (t - 0.5) * part.size[axis] * 0.7;
-      const at = [part.at[0], part.at[1], part.at[2]];
-      at[axis] += shift;
-      const x = THREE.MathUtils.clamp(0.5 + at[0] * 0.2, 0.16, 0.84);
-      const y = THREE.MathUtils.clamp(0.38 + at[1] * 0.18, 0.16, 0.84);
-      const z = THREE.MathUtils.clamp(0.5 + at[2] * 0.2, 0.16, 0.84);
-      const bulk = (part.size[0] + part.size[1] + part.size[2]) / 3;
-      const strength = THREE.MathUtils.clamp((0.55 + bulk * 0.85) / steps, 0.2, 1.1);
-      blob.addBall(x, y, z, strength, 12, color);
-    }
-  }
-  blob.update();
-  const drawn = blob.geometry.drawRange.count;
-  if (drawn < 12) {
-    blob.geometry.dispose();
-    mat.dispose();
-    return null;
-  }
-  const pos = blob.geometry.getAttribute("position");
-  const min = new THREE.Vector3(Infinity, Infinity, Infinity);
-  const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
-  const vert = new THREE.Vector3();
-  for (let i = 0; i < drawn; i++) {
-    vert.fromBufferAttribute(pos, i);
-    min.min(vert);
-    max.max(vert);
-  }
-  const size = new THREE.Vector3().subVectors(max, min);
-  const center = new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5);
-  const maxDim = Math.max(size.x, size.y, size.z, 0.001);
-  const fit = target / maxDim;
-  blob.scale.setScalar(fit);
-  blob.position.set(-center.x * fit, -min.y * fit, -center.z * fit);
-  blob.castShadow = true;
-  blob.receiveShadow = true;
-  blob.frustumCulled = false;
-  return blob;
+function seat(group: THREE.Group) {
+  const holder = new THREE.Group();
+  while (group.children.length) holder.add(group.children[0]!);
+  group.add(holder);
+  holder.updateWorldMatrix(true, true);
+  const box = new THREE.Box3().setFromObject(holder);
+  if (box.isEmpty()) return group;
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+  holder.position.sub(center);
+  group.userData.half = { x: size.x * 0.5, y: size.y * 0.5, z: size.z * 0.5 };
+  return group;
 }
 
 export function sculptFromImage(img: CanvasImageSource | null, target: number, spec?: MeshSpec | null) {
   const body = sanitizeMesh(spec ?? {});
   const group = new THREE.Group();
   const designed = !!spec && spec.parts.length >= 3;
-  if (designed) {
-    const solid = smoothSolid(body, target);
-    if (solid) {
-      group.add(solid);
-      return group;
-    }
+  let photo: THREE.Texture | null = null;
+  if (designed && img) {
+    photo = new THREE.Texture(img);
+    photo.colorSpace = THREE.SRGBColorSpace;
+    photo.anisotropy = quality.spectral ? 16 : 8;
+    photo.needsUpdate = true;
   }
   if (!designed && img) {
     const skin = shellMesh(img, target, body);
     if (skin) group.add(skin);
   }
   if (designed || !group.children.length) {
-    for (const part of body.parts) group.add(partMesh(part, target, body));
+    let biggest = -1;
+    let bi = 0;
+    body.parts.forEach((part, index) => {
+      const volume = part.size[0] * part.size[1] * part.size[2];
+      if (volume > biggest) {
+        biggest = volume;
+        bi = index;
+      }
+    });
+    body.parts.forEach((part, index) => group.add(partMesh(part, target, body, index === bi ? photo : null)));
   }
   if (!group.children.length) return null;
-  return group;
+  return seat(group);
 }

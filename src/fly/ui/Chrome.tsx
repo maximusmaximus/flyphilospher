@@ -28,11 +28,68 @@ function mergeDrops(local: DropItem[], remote: DropItem[]) {
   return [...map.values()];
 }
 
+const PHASES = ["Writing", "Shaping", "Painting"];
+
+function PhaseRing({ prompt, step }: { prompt: string; step: number }) {
+  const r = 40;
+  const c = 2 * Math.PI * r;
+  const gap = c * 0.045;
+  const seg = (c - gap * 3) / 3;
+  return (
+    <div
+      className="pointer-events-none absolute left-1/2 z-20 -translate-x-1/2"
+      style={{ top: "calc(env(safe-area-inset-top) + 72px)" }}
+    >
+      <div className="relative grid h-[148px] w-[148px] place-items-center">
+        <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90">
+          <circle cx="50" cy="50" r="46" fill="rgba(16,14,18,0.78)" />
+          {[0, 1, 2].map((i) => {
+            const done = i < step;
+            const live = i === step;
+            const fill = done ? 1 : live ? 0.62 : 0;
+            return (
+              <g key={i}>
+                <circle
+                  cx="50"
+                  cy="50"
+                  r={r}
+                  fill="none"
+                  stroke="rgba(246,241,234,0.18)"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeDasharray={`${seg} ${c}`}
+                  strokeDashoffset={-(i * (seg + gap))}
+                />
+                {fill > 0 ? (
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r={r}
+                    fill="none"
+                    stroke="#f6f1ea"
+                    strokeWidth="2.6"
+                    strokeLinecap="round"
+                    strokeDasharray={`${seg * fill} ${c}`}
+                    strokeDashoffset={-(i * (seg + gap))}
+                  />
+                ) : null}
+              </g>
+            );
+          })}
+        </svg>
+        <div className="z-10 max-w-[92px] px-2 text-center">
+          <div className="text-[10px] tracking-[0.16em] text-fog">{PHASES[step]}</div>
+          <div className="mt-1 line-clamp-3 text-[12px] leading-snug text-ivory">{prompt}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 const STEPS = [
   "Drag to look around. Pinch or scroll to come closer. The view stays on the room.",
   "Lean in and the fly leaves the stone. Back away and it lands. It will not pass through the glass.",
   "Each leg, the hairs, the antennae, and the wings report into the brain at the lower right.",
-  "Type something. You will see it rewritten, shaped as a solid, then painted, and when it falls.",
+  "Type something. A ring shows the writing, the shape, and the paint. It falls only when the object is whole.",
   "Tap an object to see what it is. The mirror grows as the stone fills. The fly remembers the shapes.",
 ];
 
@@ -49,6 +106,7 @@ export function Chrome() {
   const [mobile, setMobile] = useState(false);
   const [phase, setPhase] = useState("");
   const [phaseWhen, setPhaseWhen] = useState<number | null>(null);
+  const [pending, setPending] = useState<{ prompt: string; step: number } | null>(null);
 
   useEffect(() => {
     const apply = () => setMobile(detectQuality().mobile || window.innerWidth < 820);
@@ -92,7 +150,7 @@ export function Chrome() {
   }, []);
 
   const free = items.length < 10;
-  const upcoming = items.filter((item) => item.dropAt > now).sort((a, b) => a.dropAt - b.dropAt)[0];
+  const upcoming = items.filter((item) => item.stage === "painted" && item.dropAt > now).sort((a, b) => a.dropAt - b.dropAt)[0];
   const nextAt = nextDropAt(
     items.map((item) => item.dropAt),
     now,
@@ -119,25 +177,17 @@ export function Chrome() {
       mesh: tokenMesh(text),
       stage: "token",
     };
-    sim.drops = mergeDrops(sim.drops, [optimistic]);
-    setItems(sim.drops);
     setPrompt("");
     setBusy(true);
     setError("");
-    setPhase("Falling now");
-    setPhaseWhen(optimistic.dropAt);
-    sim.say(`${text} is falling.`);
+    setPending({ prompt: text, step: 0 });
     try {
       const quality = detectQuality().mobile ? "low" : "high";
       const placed = await placeDrop({ data: { prompt: text, id: optimistic.id, mesh: optimistic.mesh } });
-      sim.drops = mergeDrops(sim.drops.filter((item) => item.id !== optimistic.id), [placed.item]);
-      setItems(sim.drops);
-      setPhase("Shaping the solid");
+      setPending({ prompt: text, step: 1 });
       try {
         const designed = await designDrop({ data: { prompt: text, id: placed.item.id } });
-        sim.drops = mergeDrops(sim.drops, [{ ...designed.item, stage: "solid" }]);
-        setItems(sim.drops);
-        setPhase("Painting the surface");
+        setPending({ prompt: text, step: 2 });
         const result = await submitDrop({
           data: {
             prompt: text,
@@ -147,22 +197,18 @@ export function Chrome() {
             id: designed.item.id,
           },
         });
-        sim.drops = mergeDrops(sim.drops, [{ ...result.item, stage: result.painted === false ? "solid" : "painted" }]);
+        const item = { ...result.item, dropAt: Math.min(result.item.dropAt, Date.now() - 200) };
+        sim.drops = mergeDrops(sim.drops, [item]);
         setItems(sim.drops);
-        setPhase(result.painted === false ? "Solid is falling" : "Falling now");
+        sim.say(`${item.prompt} is falling.`);
         if (result.painted === false) setError("the paint failed, the solid is still falling");
       } catch (err) {
-        setPhase("Solid is falling");
         setError(err instanceof Error ? err.message : "the maker is still catching up");
       }
-      window.setTimeout(() => {
-        setPhase("");
-        setPhaseWhen(null);
-      }, 4000);
     } catch (err) {
-      setPhase("");
       setError(err instanceof Error ? err.message : "it could not be saved");
     } finally {
+      setPending(null);
       setBusy(false);
     }
   };
@@ -235,10 +281,11 @@ export function Chrome() {
             </div>
           </div>
         </div>
+        {pending ? <PhaseRing prompt={pending.prompt} step={pending.step} /> : null}
         {error ? (
           <div
             className="pointer-events-auto absolute left-1/2 -translate-x-1/2 rounded-full bg-void/90 px-3 py-1 text-xs text-ivory"
-            style={{ top: mobile ? "calc(env(safe-area-inset-top) + 118px)" : "calc(env(safe-area-inset-top) + 62px)" }}
+            style={{ top: pending ? "calc(env(safe-area-inset-top) + 232px)" : mobile ? "calc(env(safe-area-inset-top) + 118px)" : "calc(env(safe-area-inset-top) + 62px)" }}
           >
             {error}
           </div>
