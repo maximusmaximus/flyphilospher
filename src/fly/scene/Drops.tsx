@@ -150,7 +150,12 @@ function Piece({ item }: { item: DropItem }) {
     };
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.onload = () => apply(img);
+    img.onload = () => {
+      if (gone) return;
+      const emb = topologyFromImage(img);
+      const body = bodies.get(item.id);
+      if (body && emb) body.emb = emb;
+    };
     img.src = item.image;
     return () => {
       gone = true;

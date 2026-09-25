@@ -210,7 +210,7 @@ async function designObject(prompt: string, key: string) {
       {
         model: "grok-4-7",
         temperature: 0.3,
-        max_completion_tokens: 1400,
+        max_completion_tokens: 2400,
         reasoning: { enabled: false, effort: "none" },
         venice_parameters: { disable_thinking: true, strip_thinking_response: true },
         response_format: { type: "json_object" },
@@ -218,9 +218,9 @@ async function designObject(prompt: string, key: string) {
           {
             role: "system",
             content:
-              "Design one small physical object as JSON only. Keys: prompt (one sentence: a single real example of the requested thing, filling the frame, plain light background, its own packaging print is allowed), metalness 0-1, roughness 0-1, depth 0.35-0.85, parts (8 to 14). Each part: kind ellipsoid|capsule|box|cone, at [x,y,z] from -1 to 1, size [sx,sy,sz] from 0.08 to 1.1, rot [rx,ry,rz] radians, color #rrggbb. y is up and 0 is the ground. Match the request: a bag is a crimped pouch, not a flat card. A creature needs a body, a head, ears or a tail when it has them, and one part per limb.",
+              "Design one small physical object as JSON only. Keys: prompt (one short sentence naming the object), metalness 0-1, roughness 0-1, depth 0.35-0.85, parts (16 to 24). Each part: kind ellipsoid|capsule|box|cone, at [x,y,z] from -1 to 1, size [sx,sy,sz] from 0.05 to 1.1, rot [rx,ry,rz] radians, color #rrggbb. y is up and 0 is the ground. Parts must overlap their neighbors so they fuse into one solid. A creature needs a chest, belly, head, snout, two ears, two eyes, a neck, four legs, paws, and a tail. A made object needs a part for every distinct piece of its real shape. Never return a single flat card.",
           },
-          { role: "user", content: attempt === 0 ? prompt : `${prompt}. Return at least eight solid parts.` },
+          { role: "user", content: attempt === 0 ? prompt : `${prompt}. Return at least sixteen overlapping solid parts.` },
         ],
       },
       key,

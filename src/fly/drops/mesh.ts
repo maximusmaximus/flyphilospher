@@ -19,7 +19,7 @@ export function sanitizeMesh(raw: unknown): MeshSpec {
   const src = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const partsIn = Array.isArray(src.parts) ? src.parts : [];
   const parts: MeshPart[] = [];
-  for (const item of partsIn.slice(0, 16)) {
+  for (const item of partsIn.slice(0, 24)) {
     if (!item || typeof item !== "object") continue;
     const part = item as Record<string, unknown>;
     const kind = KINDS.has(String(part.kind)) ? (String(part.kind) as MeshPart["kind"]) : "ellipsoid";
